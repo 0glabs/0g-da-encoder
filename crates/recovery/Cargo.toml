@@ -1,0 +1,19 @@
+[package]
+name = "recovery"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+zg-encoder = { workspace = true }
+amt = { workspace = true, default-features = false }
+ark-ff = "0.4"
+ark-poly = "0.4"
+ark-std = "0.4"
+
+[dev-dependencies]
+rand = "0.8"
+zg-encoder = { workspace = true, features = ["testonly_code"]}
+
+[features]
+default = []
+parallel = ["ark-poly/parallel", "ark-std/parallel", "amt/parallel"]
