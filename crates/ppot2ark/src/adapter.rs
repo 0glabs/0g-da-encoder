@@ -43,13 +43,17 @@ pub trait Adapter {
 impl Adapter for ppot::FqRepr {
     type Output = ark::FqRepr;
 
-    fn adapt(self) -> Self::Output { ark::BigInt(self.0) }
+    fn adapt(self) -> Self::Output {
+        ark::BigInt(self.0)
+    }
 }
 
 impl Adapter for ppot::FrRepr {
     type Output = ark::FrRepr;
 
-    fn adapt(self) -> Self::Output { ark::BigInt(self.0) }
+    fn adapt(self) -> Self::Output {
+        ark::BigInt(self.0)
+    }
 }
 
 impl Adapter for ppot::Fq {

@@ -58,7 +58,9 @@ impl<PE: Pairing> Valid for AMTParams<PE> {
     fn batch_check<'a>(
         batch: impl Iterator<Item = &'a Self> + Send,
     ) -> Result<(), SerializationError>
-    where Self: 'a {
+    where
+        Self: 'a,
+    {
         let batch: Vec<_> = batch.collect();
         Valid::batch_check(batch.iter().map(|v| &v.basis))?;
         Valid::batch_check(batch.iter().map(|v| &v.quotients))?;

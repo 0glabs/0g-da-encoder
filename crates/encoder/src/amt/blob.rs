@@ -56,7 +56,9 @@ impl EncodedBlobAMT {
         )
     }
 
-    pub(crate) fn get_commitment(&self) -> G1Aff<PE> { self.0[0].commitment }
+    pub(crate) fn get_commitment(&self) -> G1Aff<PE> {
+        self.0[0].commitment
+    }
 
     #[cfg(any(test, feature = "testonly_code"))]
     pub(crate) fn get_invalid_row(

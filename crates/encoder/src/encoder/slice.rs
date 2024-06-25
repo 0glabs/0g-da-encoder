@@ -34,9 +34,13 @@ impl EncodedSlice {
         Self { index, amt, merkle }
     }
 
-    pub fn amt(&self) -> &EncodedSliceAMT { &self.amt }
+    pub fn amt(&self) -> &EncodedSliceAMT {
+        &self.amt
+    }
 
-    pub fn merkle(&self) -> &EncodedSliceMerkle { &self.merkle }
+    pub fn merkle(&self) -> &EncodedSliceMerkle {
+        &self.merkle
+    }
 
     pub(crate) fn check_merkle_idx(&self) -> Result<(), VerifierError> {
         if self.index != self.merkle.index() {
@@ -90,7 +94,9 @@ impl EncodedSlice {
 }
 
 impl EncodedSlice {
-    pub fn amt_row(&self) -> Vec<Scalar> { self.amt.row().clone() }
+    pub fn amt_row(&self) -> Vec<Scalar> {
+        self.amt.row().clone()
+    }
 
     pub fn merkle_row(&self) -> Vec<[u8; 32]> {
         cfg_iter!(self.amt.row())

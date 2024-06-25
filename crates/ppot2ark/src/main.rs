@@ -262,7 +262,9 @@ mod tests {
 
     use super::*;
 
-    fn data_path() -> String { format!("{}/data", crate_path()) }
+    fn data_path() -> String {
+        format!("{}/data", crate_path())
+    }
 
     fn prepare_test_file(ty: InputType, degree: usize) {
         let target_file = format!("{}/{}", data_path(), ty.file_name(degree));

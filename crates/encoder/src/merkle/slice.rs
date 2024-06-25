@@ -41,7 +41,9 @@ impl EncodedSliceMerkle {
         }
     }
 
-    pub(crate) fn index(&self) -> usize { self.leaf_index }
+    pub(crate) fn index(&self) -> usize {
+        self.leaf_index
+    }
 
     pub(crate) fn fields(&self) -> ([Bytes32; COSET_N], Vec<Bytes32>, Bytes32) {
         (self.root, self.proof.clone(), self.leaf)

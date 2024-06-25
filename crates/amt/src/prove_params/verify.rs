@@ -9,7 +9,8 @@ use ark_ec::VariableBaseMSM;
 use super::AMTParams;
 
 impl<PE: Pairing> AMTParams<PE>
-where G1<PE>: VariableBaseMSM<MulBase = G1Aff<PE>>
+where
+    G1<PE>: VariableBaseMSM<MulBase = G1Aff<PE>>,
 {
     pub fn verify_proof(
         &self, ri_data: &[Fr<PE>], batch_index: usize, proof: &Proof<PE>,

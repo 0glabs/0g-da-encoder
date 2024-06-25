@@ -5,17 +5,23 @@ use std::ops::{Deref, DerefMut};
 pub struct RawData(Vec<u8>); // MAX_BLOB_SIZE
 
 impl Default for RawData {
-    fn default() -> Self { RawData(vec![0u8; MAX_BLOB_SIZE]) }
+    fn default() -> Self {
+        RawData(vec![0u8; MAX_BLOB_SIZE])
+    }
 }
 
 impl Deref for RawData {
     type Target = [u8];
 
-    fn deref(&self) -> &Self::Target { &self.0 }
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 impl DerefMut for RawData {
-    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
 }
 
 impl TryFrom<&[u8]> for RawData {
