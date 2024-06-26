@@ -11,8 +11,8 @@ pub type G2Curve = G2Projective;
 const TEST_SETTING: bool = (cfg!(test) || cfg!(feature = "testonly_code"))
     && !cfg!(feature = "production_mode");
 
-pub const BLOB_ROW_LOG: usize = if TEST_SETTING { 2 } else { 10 };
-pub const BLOB_COL_LOG: usize = if TEST_SETTING { 1 } else { 10 };
+pub const BLOB_ROW_LOG: usize = if TEST_SETTING { 6 } else { 10 };
+pub const BLOB_COL_LOG: usize = if TEST_SETTING { 5 } else { 10 };
 
 pub const COSET_N: usize = 3;
 

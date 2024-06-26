@@ -93,7 +93,7 @@ impl Poly {
                     }
                 }
                 assert_ne!(res[res_degree], Scalar::zero());
-                Poly::from_vec_uncheck(res)
+                Poly::from_vec(res)
             }
 
             (Poly::Dense(dense), Poly::Sparse(sparse))
@@ -105,8 +105,7 @@ impl Poly {
                             dense_coeff * sparse_coeff;
                     }
                 }
-                assert_ne!(res[res_degree], Scalar::zero());
-                Poly::from_vec_uncheck(res)
+                Poly::from_vec(res)
             }
 
             (Poly::Sparse(sparse_1), Poly::Sparse(sparse_2)) => {
@@ -120,7 +119,9 @@ impl Poly {
                             .or_insert(coeff);
                     }
                 }
-                assert_ne!(*res.last_key_value().unwrap().1, Scalar::zero());
+                if !res.is_empty() {
+                    assert_ne!(*res.last_key_value().unwrap().1, Scalar::zero());
+                }
                 let keys_to_remove: Vec<usize> = res
                     .iter()
                     .filter(|&(_, value)| *value == Scalar::zero())
@@ -159,7 +160,7 @@ impl Poly {
             .all(|&x| x == Scalar::zero());
         assert!(all_zeros);
         assert_ne!(coeffs[res_degree], Scalar::zero());
-        Poly::from_vec_uncheck(coeffs[..(res_degree + 1)].to_vec())
+        Poly::from_vec(coeffs[..(res_degree + 1)].to_vec())
     }
 }
 
@@ -228,14 +229,6 @@ impl Poly {
         }
     }
 
-    // vec[-1] != Scalar::zero() has been ensured
-    pub fn from_vec_uncheck(vec: Vec<Scalar>) -> Self {
-        if many_non_zeros(&vec) {
-            Poly::Dense(vec)
-        } else {
-            Poly::sparse_from_vec(vec)
-        }
-    }
     pub fn from_vec(vec: Vec<Scalar>) -> Self {
         if many_non_zeros(&vec) {
             Poly::dense_from_vec(&vec)

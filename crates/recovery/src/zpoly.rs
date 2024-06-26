@@ -62,13 +62,11 @@ pub fn zpoly(line_ids: BTreeSet<usize>) -> Poly {
         assert!(line_ids.last().unwrap() < &BLOB_ROW_ENCODED);
     }
 
-    dbg!(line_ids.len());
     let mut all_line_ids = line_ids.clone();
     for more_id in BLOB_ROW_ENCODED..COSET_MORE * BLOB_ROW_N {
         all_line_ids.insert(more_id);
     }
-    dbg!(all_line_ids.len());
-
+    
     let mut polys = vec![Poly::One(()); BLOB_ROW_ENCODED.next_power_of_two()];
     assert_eq!(COSET_MORE * BLOB_ROW_N, polys.len());
     let zblob = ZBlob::init();
@@ -97,7 +95,6 @@ mod tests {
 
     fn check_zpoly(line_ids: BTreeSet<usize>) {
         let coeffs = zpoly(line_ids.clone()).to_vec();
-        dbg!(coeffs.len());
         assert_eq!(
             coeffs.len(),
             (COSET_MORE - COSET_N) * RAW_BLOB_SIZE

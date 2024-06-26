@@ -35,7 +35,8 @@ pub fn random_scalars(length: usize) -> Vec<Scalar> {
         .collect::<Vec<_>>()
 }
 
-pub fn fx_to_fkx(coeffs: &mut [Scalar], k: Scalar) {
+pub fn fx_to_fkx(coeffs_fx: &[Scalar], k: Scalar) -> Vec<Scalar> {
+    let mut coeffs = coeffs_fx.to_vec();
     cfg_chunks_mut!(coeffs, 16)
         .enumerate()
         .for_each(|(idx, chunks)| {
@@ -45,15 +46,21 @@ pub fn fx_to_fkx(coeffs: &mut [Scalar], k: Scalar) {
                 base *= k;
             }
         });
+    coeffs
 }
 
 fn coeffs_to_evals_coset(
-    mut coeffs: Vec<Scalar>, coset_idx: usize,
+    _coeffs: &[Scalar], coset_idx: usize,
 ) -> Vec<Scalar> {
-    if coset_idx != 0 {
-        let coset_w = AMTParams::<PE>::coset_factor(RAW_BLOB_SIZE, coset_idx);
-        fx_to_fkx(&mut coeffs, coset_w);
-    }
+    let coeffs = {
+        if coset_idx != 0 {
+            let coset_w = AMTParams::<PE>::coset_factor(RAW_BLOB_SIZE, coset_idx);
+            fx_to_fkx(&_coeffs, coset_w)
+        }
+        else {
+            _coeffs.to_vec()
+        }
+    };
 
     assert!(coeffs.len() <= COSET_MORE * RAW_BLOB_SIZE * 2 + 1);
     assert!(RAW_BLOB_SIZE.is_power_of_two());
@@ -72,21 +79,21 @@ fn coeffs_to_evals_coset(
 
 pub fn coeffs_to_evals(coeffs: &[Scalar]) -> Vec<Scalar> {
     (0..COSET_N)
-        .flat_map(|coset_idx| coeffs_to_evals_coset(coeffs.to_vec(), coset_idx))
+        .flat_map(|coset_idx| coeffs_to_evals_coset(coeffs, coset_idx))
         .collect()
 }
 
 pub fn coeffs_to_evals_more(coeffs: &[Scalar]) -> Vec<Scalar> {
     let coset_larger = COSET_N.next_power_of_two();
     (COSET_N..coset_larger)
-        .flat_map(|coset_idx| coeffs_to_evals_coset(coeffs.to_vec(), coset_idx))
+        .flat_map(|coset_idx| coeffs_to_evals_coset(coeffs, coset_idx))
         .collect()
 }
 
 pub fn coeffs_to_evals_larger(coeffs: &[Scalar]) -> Vec<Scalar> {
     let coset_larger = COSET_N.next_power_of_two();
     (0..coset_larger)
-        .flat_map(|coset_idx| coeffs_to_evals_coset(coeffs.to_vec(), coset_idx))
+        .flat_map(|coset_idx| coeffs_to_evals_coset(coeffs, coset_idx))
         .collect()
 }
 
