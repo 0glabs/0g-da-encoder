@@ -115,13 +115,9 @@ impl<PE: Pairing> AMTParams<PE> {
         )?)
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.basis.is_empty()
-    }
+    pub fn is_empty(&self) -> bool { self.basis.is_empty() }
 
-    pub fn len(&self) -> usize {
-        self.basis.len()
-    }
+    pub fn len(&self) -> usize { self.basis.len() }
 
     fn enact<T: CurveGroup>(input: Vec<T>) -> Vec<<T as CurveGroup>::Affine> {
         let mut affine = CurveGroup::normalize_batch(input.as_slice());

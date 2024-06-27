@@ -1,18 +1,19 @@
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
 use std::cmp::max;
 
-use amt::AMTParams;
-use amt::{bitreverse, change_matrix_direction};
+use amt::{bitreverse, change_matrix_direction, AMTParams};
 use ark_ff::{Field, Zero};
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
 use ark_std::{cfg_chunks_mut, log2};
+#[cfg(test)]
 use ark_std::{rand, UniformRand};
 use zg_encoder::constants::{
     Scalar, BLOB_COL_LOG, BLOB_ROW_LOG, COSET_N, PE, RAW_BLOB_SIZE,
 };
-use zg_encoder::constants::{BLOB_COL_N, ENCODED_BLOB_SIZE};
 
-use crate::poly::{polys_multiply, Poly};
-use crate::zpoly::COSET_MORE;
+use crate::{poly::Poly, zpoly::COSET_MORE};
 
 const SPARSE_THRES: usize = 100;
 pub fn many_non_zeros(vec: &[Scalar]) -> bool {
@@ -28,6 +29,7 @@ pub fn many_non_zeros(vec: &[Scalar]) -> bool {
     false
 }
 
+#[cfg(test)]
 pub fn random_scalars(length: usize) -> Vec<Scalar> {
     let mut rng = rand::thread_rng();
     (0..length)
@@ -49,20 +51,18 @@ pub fn fx_to_fkx(coeffs_fx: &[Scalar], k: Scalar) -> Vec<Scalar> {
     coeffs
 }
 
-fn coeffs_to_evals_coset(
-    _coeffs: &[Scalar], coset_idx: usize,
-) -> Vec<Scalar> {
+fn coeffs_to_evals_coset(_coeffs: &[Scalar], coset_idx: usize) -> Vec<Scalar> {
     let coeffs = {
         if coset_idx != 0 {
-            let coset_w = AMTParams::<PE>::coset_factor(RAW_BLOB_SIZE, coset_idx);
-            fx_to_fkx(&_coeffs, coset_w)
-        }
-        else {
+            let coset_w =
+                AMTParams::<PE>::coset_factor(RAW_BLOB_SIZE, coset_idx);
+            fx_to_fkx(_coeffs, coset_w)
+        } else {
             _coeffs.to_vec()
         }
     };
 
-    assert!(coeffs.len() <= COSET_MORE * RAW_BLOB_SIZE * 2 + 1);
+    assert!(coeffs.len() <= COSET_MORE * RAW_BLOB_SIZE + 1);
     assert!(RAW_BLOB_SIZE.is_power_of_two());
     let fft_degree = max(coeffs.len().next_power_of_two(), RAW_BLOB_SIZE);
     let fft_domain = Radix2EvaluationDomain::<Scalar>::new(fft_degree).unwrap();
@@ -83,6 +83,7 @@ pub fn coeffs_to_evals(coeffs: &[Scalar]) -> Vec<Scalar> {
         .collect()
 }
 
+#[cfg(test)]
 pub fn coeffs_to_evals_more(coeffs: &[Scalar]) -> Vec<Scalar> {
     let coset_larger = COSET_N.next_power_of_two();
     (COSET_N..coset_larger)

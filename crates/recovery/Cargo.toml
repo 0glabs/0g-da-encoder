@@ -9,6 +9,7 @@ amt = { workspace = true, default-features = false }
 ark-ff = "0.4"
 ark-poly = "0.4"
 ark-std = "0.4"
+rayon = { workspace = true, optional = true }
 
 [dev-dependencies]
 rand = "0.8"
@@ -16,4 +17,4 @@ zg-encoder = { workspace = true, features = ["testonly_code"]}
 
 [features]
 default = []
-parallel = ["ark-poly/parallel", "ark-std/parallel", "amt/parallel"]
+parallel = ["ark-poly/parallel", "ark-std/parallel", "amt/parallel", "zg-encoder/parallel", "rayon"]

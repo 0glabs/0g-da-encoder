@@ -14,15 +14,11 @@ pub struct RawBlob(Vec<Scalar>); // BLOB_ROW_N * BLOB_COL_N
 impl Deref for RawBlob {
     type Target = [Scalar];
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+    fn deref(&self) -> &Self::Target { &self.0 }
 }
 
 impl DerefMut for RawBlob {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
 }
 
 impl From<RawData> for RawBlob {

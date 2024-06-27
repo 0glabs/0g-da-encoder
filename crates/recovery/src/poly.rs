@@ -1,10 +1,13 @@
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
 use std::collections::BTreeMap;
 
 use crate::utils::many_non_zeros;
-use ark_ff::{Field, One, Zero};
+use ark_ff::{One, Zero};
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
-use ark_std::log2;
-use zg_encoder::constants::Scalar;
+use ark_std::{cfg_iter, log2};
+use zg_encoder::{cfg_chunks_exact, constants::Scalar};
 
 #[derive(Clone, Debug)]
 pub enum Poly {
@@ -16,7 +19,7 @@ pub enum Poly {
 impl Poly {
     fn len(&self) -> usize {
         match self {
-            Poly::One(_) => 1,
+            Poly::One(_) => 0,
             Poly::Sparse(inner) => inner.len(),
             Poly::Dense(inner) => inner.len(),
         }
@@ -44,24 +47,6 @@ impl Poly {
 }
 
 impl Poly {
-    pub fn poly_all_zeros(degree: usize) -> Poly {
-        assert!(degree.is_power_of_two());
-        let mut res = BTreeMap::new();
-        res.insert(degree, Scalar::one());
-        res.insert(0, -Scalar::one());
-        Poly::Sparse(res)
-    }
-
-    pub fn poly_all_zeros_shift(degree: usize, coset_factor: Scalar) -> Poly {
-        assert!(degree.is_power_of_two());
-        let mut res = BTreeMap::new();
-        res.insert(degree, Scalar::one());
-        res.insert(0, -coset_factor.pow([degree as u64]));
-        Poly::Sparse(res)
-    }
-}
-
-impl Poly {
     pub fn multiply(&self, other: &Poly) -> Poly {
         if let Poly::One(_) = self {
             return other.clone();
@@ -76,6 +61,7 @@ impl Poly {
         if sparse_complexity < dense_complexity {
             self.multiply_sparse(other, res_degree)
         } else {
+            dbg!("dense");
             self.multiply_dense(other, res_degree)
         }
     }
@@ -120,7 +106,10 @@ impl Poly {
                     }
                 }
                 if !res.is_empty() {
-                    assert_ne!(*res.last_key_value().unwrap().1, Scalar::zero());
+                    assert_ne!(
+                        *res.last_key_value().unwrap().1,
+                        Scalar::zero()
+                    );
                 }
                 let keys_to_remove: Vec<usize> = res
                     .iter()
@@ -145,9 +134,8 @@ impl Poly {
             Radix2EvaluationDomain::<Scalar>::new(fft_degree).unwrap();
         let evals_1 = fft_domain.fft(&coeffs_1);
         let evals_2 = fft_domain.fft(&coeffs_2);
-        let evals: Vec<Scalar> = evals_1
-            .iter()
-            .zip(evals_2.iter())
+        let evals: Vec<Scalar> = cfg_iter!(evals_1)
+            .zip(cfg_iter!(evals_2))
             .map(|(x, y)| x * y)
             .collect();
         // #(evals == 0) <= res_degree
@@ -155,30 +143,33 @@ impl Poly {
         // thus, evals contain at least one non-zero element
         // therefore, directly ifft is Ok
         let coeffs = fft_domain.ifft(&evals);
-        let all_zeros = coeffs[(res_degree + 1)..]
-            .iter()
-            .all(|&x| x == Scalar::zero());
+        let all_zeros =
+            cfg_iter!(coeffs[(res_degree + 1)..]).all(|&x| x == Scalar::zero());
         assert!(all_zeros);
         assert_ne!(coeffs[res_degree], Scalar::zero());
         Poly::from_vec(coeffs[..(res_degree + 1)].to_vec())
     }
 }
 
-pub fn polys_multiply(mut polys: Vec<Poly>) -> Poly {
-    let num = polys.len();
-    if !num.is_power_of_two() {
-        polys = [polys, vec![Poly::One(()); num.next_power_of_two() - num]]
-            .concat();
-    }
-    let num_iter = log2(polys.len()) as usize;
+pub fn polys_multiply(polys_ori: &[Poly]) -> Poly {
+    let num = polys_ori.len();
+    let num_power_2 = num.next_power_of_two();
+    let mut polys = {
+        if num < num_power_2 {
+            [polys_ori.to_vec(), vec![Poly::One(()); num_power_2 - num]]
+                .concat()
+        } else {
+            polys_ori.to_vec()
+        }
+    };
+    let num_iter = log2(num_power_2) as usize;
     for _ in 0..num_iter {
-        polys = polys
-            .chunks_exact(2)
+        polys = cfg_chunks_exact!(polys, 2)
             .map(|x| x[0].multiply(&x[1]))
             .collect::<Vec<_>>();
     }
     assert_eq!(polys.len(), 1);
-    polys[0].clone()
+    polys.pop().unwrap()
 }
 
 impl Poly {
@@ -210,13 +201,14 @@ impl Poly {
         }
         res
     }
+
     pub fn to_vec_extend(&self, new_size: usize) -> Vec<Scalar> {
+        assert!(new_size > self.degree());
         match self {
             Poly::Dense(dense) => {
                 let extend_dense: Vec<Scalar> =
                     vec![Scalar::zero(); new_size - dense.len()];
-                let dense_origin: Vec<Scalar> = dense.clone();
-                [dense_origin, extend_dense].concat()
+                [dense.to_vec(), extend_dense].concat()
             }
             Poly::Sparse(sparse) => {
                 let mut res = vec![Scalar::zero(); new_size];
@@ -236,6 +228,7 @@ impl Poly {
             Poly::sparse_from_vec(vec)
         }
     }
+
     pub fn dense_from_vec(vec: &[Scalar]) -> Self {
         let mut res = vec.to_vec();
         if let Some(last_pos) =
@@ -247,12 +240,12 @@ impl Poly {
         }
         Poly::Dense(res)
     }
+
     pub fn sparse_from_vec(vec: Vec<Scalar>) -> Self {
         let res: BTreeMap<usize, Scalar> = vec
             .into_iter()
             .enumerate()
-            .filter(|&(_, ref value)| *value != Scalar::zero())
-            .map(|(idx, element)| (idx, element))
+            .filter(|(_, value)| *value != Scalar::zero())
             .collect();
         Poly::Sparse(res)
     }
@@ -266,7 +259,13 @@ impl PartialEq for Poly {
         }
         match (self, other) {
             (Self::One(_), Self::Dense(inner))
-            | (Self::Dense(inner), Self::One(_)) => inner[0] == Scalar::one(),
+            | (Self::Dense(inner), Self::One(_)) => {
+                if inner.is_empty() {
+                    false
+                } else {
+                    inner[0] == Scalar::one()
+                }
+            }
             (Self::One(_), Self::Sparse(inner))
             | (Self::Sparse(inner), Self::One(_)) => {
                 if let Some(value) = inner.get(&0) {
@@ -284,16 +283,25 @@ impl PartialEq for Poly {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use crate::utils::random_scalars;
-    use ark_ff::{Field, One, Zero};
-    use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
+    use ark_ff::Zero;
     use ark_std::rand;
-    use rand::seq::SliceRandom;
-    use rand::thread_rng;
+    use rand::{seq::SliceRandom, thread_rng};
     use zg_encoder::constants::Scalar;
 
     use super::Poly;
+
+    #[test]
+    fn test_poly_from_vec_all_zeros() {
+        let vec = vec![Scalar::zero(); 16];
+        let dense_poly = Poly::dense_from_vec(&vec);
+        assert_eq!(dense_poly.degree(), 0);
+        assert_eq!(dense_poly.len(), 0);
+        assert_eq!(dense_poly, Poly::sparse_from_vec(vec));
+        assert_ne!(dense_poly, Poly::One(()));
+    }
 
     #[test]
     fn test_dense_sparse_consistency() {
@@ -338,23 +346,5 @@ mod tests {
         mul_res.push(mul_res[0].multiply(&Poly::One(())));
         mul_res.push(Poly::One(()).multiply(&mul_res[0]));
         assert!(all_elements_same(&mul_res));
-    }
-
-    #[test]
-    fn test_poly_all_zeros() {
-        for log_degree in 0..14 {
-            let degree = 1 << log_degree;
-            let poly = Poly::poly_all_zeros(degree);
-            let coeffs = poly.to_vec_extend(degree + 1);
-            assert_ne!(coeffs[degree], Scalar::zero());
-            let fft_domain =
-                Radix2EvaluationDomain::<Scalar>::new(degree * 2).unwrap();
-            let evals = fft_domain.fft(&coeffs);
-            let zeros: Vec<Scalar> = evals.iter().step_by(2).cloned().collect();
-            let non_zeros: Vec<Scalar> =
-                evals.iter().skip(1).step_by(2).cloned().collect();
-            assert!(zeros.iter().all(|&x| x == Scalar::zero()));
-            assert!(non_zeros.iter().all(|&x| x == -(Scalar::one()).double()));
-        }
     }
 }

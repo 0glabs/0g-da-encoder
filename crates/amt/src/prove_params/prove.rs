@@ -10,8 +10,7 @@ use ark_ec::{CurveGroup, VariableBaseMSM};
 use tracing::instrument;
 
 impl<PE: Pairing> AMTParams<PE>
-where
-    G1<PE>: VariableBaseMSM<MulBase = G1Aff<PE>>,
+where G1<PE>: VariableBaseMSM<MulBase = G1Aff<PE>>
 {
     #[allow(unused)]
     pub(crate) fn commitment(&self, ri_data: &[Fr<PE>]) -> G1<PE> {

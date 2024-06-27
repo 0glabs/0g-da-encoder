@@ -1,3 +1,7 @@
+use ark_std::cfg_iter;
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
 use std::collections::BTreeSet;
 
 use ark_ff::Zero;
@@ -6,20 +10,28 @@ use zg_encoder::constants::{
     RAW_BLOB_SIZE,
 };
 
-use crate::{poly::Poly, utils::{coeffs_to_evals, coeffs_to_evals_larger, evals_to_poly}, zpoly::{zpoly, COSET_MORE}};
+use crate::{
+    poly::Poly,
+    utils::{coeffs_to_evals_larger, evals_to_poly},
+    zpoly::COSET_MORE,
+};
 
 pub fn data_times_zpoly(
-    line_ids: BTreeSet<usize>, data_before_recovery: &[Scalar],
+    row_ids: &BTreeSet<usize>, data_before_recovery: &[Scalar],
     zcoeffs: &[Scalar],
 ) -> Poly {
-    if !line_ids.is_empty() {
-        assert!(line_ids.last().unwrap() < &BLOB_ROW_ENCODED);
+    if !row_ids.is_empty() {
+        assert!(row_ids.last().unwrap() < &BLOB_ROW_ENCODED);
     }
     assert_eq!(data_before_recovery.len(), ENCODED_BLOB_SIZE);
     let mut data_times_z = data_before_recovery.to_vec();
-    for row_idx in &line_ids {
-        for idx in (row_idx * BLOB_COL_N)..((row_idx + 1) * BLOB_COL_N) {
-            data_times_z[idx] = Scalar::zero();
+    for row_idx in row_ids {
+        for erasured in data_times_z
+            .iter_mut()
+            .take((row_idx + 1) * BLOB_COL_N)
+            .skip(row_idx * BLOB_COL_N)
+        {
+            *erasured = Scalar::zero();
         }
     }
     data_times_z = [
@@ -28,33 +40,40 @@ pub fn data_times_zpoly(
     ]
     .concat();
 
-    data_times_z = data_times_z.iter().zip(coeffs_to_evals_larger(&zcoeffs).iter()).map(|(x, y)| x * y).collect();
-    
+    assert!(zcoeffs.len() <= COSET_MORE * RAW_BLOB_SIZE + 1);
+    let zevals = coeffs_to_evals_larger(zcoeffs);
+    data_times_z = cfg_iter!(data_times_z)
+        .zip(cfg_iter!(zevals))
+        .map(|(x, y)| x * y)
+        .collect();
+
     evals_to_poly(data_times_z)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::data_times_zpoly::data_times_zpoly;
-    use crate::utils::{coeffs_to_evals, coeffs_to_evals_more, random_scalars};
-    use crate::zpoly::{zpoly, COSET_MORE};
+    use crate::{
+        data_times_zpoly::data_times_zpoly,
+        utils::{coeffs_to_evals, coeffs_to_evals_more, random_scalars},
+        zpoly::{zpoly, COSET_MORE},
+    };
     use ark_ff::Zero;
     use std::collections::BTreeSet;
     use zg_encoder::constants::{
-        Scalar, BLOB_COL_N, BLOB_ROW_ENCODED, BLOB_ROW_N,
-        ENCODED_BLOB_SIZE, RAW_BLOB_SIZE,
+        Scalar, BLOB_COL_N, BLOB_ROW_ENCODED, BLOB_ROW_N, ENCODED_BLOB_SIZE,
+        RAW_BLOB_SIZE,
     };
 
     fn check_data_times_zpoly(
-        line_ids: BTreeSet<usize>, data_before_recovery: &[Scalar],
+        row_ids: BTreeSet<usize>, data_before_recovery: &[Scalar],
     ) {
-        let zcoeffs = zpoly(line_ids.clone()).to_vec();
+        let zcoeffs = zpoly(&row_ids).to_vec();
         let coeffs =
-            data_times_zpoly(line_ids.clone(), data_before_recovery, &zcoeffs).to_vec();
+            data_times_zpoly(&row_ids, data_before_recovery, &zcoeffs).to_vec();
         assert!(coeffs.len() <= COSET_MORE * RAW_BLOB_SIZE);
 
         let evals = coeffs_to_evals(&coeffs);
-        for row_idx in &line_ids {
+        for row_idx in &row_ids {
             for idx in (row_idx * BLOB_COL_N)..((row_idx + 1) * BLOB_COL_N) {
                 assert_eq!(evals[idx], Scalar::zero());
             }
@@ -83,6 +102,8 @@ mod tests {
         all = (0..BLOB_ROW_ENCODED).collect();
         check_data_times_zpoly(all.clone(), &data_before_recovery);
         all.remove(&(BLOB_ROW_N * 2 - 1));
+        check_data_times_zpoly(all, &data_before_recovery);
+        all = (0..BLOB_ROW_ENCODED).skip(1).collect();
         check_data_times_zpoly(all, &data_before_recovery);
     }
 }

@@ -32,8 +32,7 @@ impl<
         const LOG_COL: usize,
         const LOG_ROW: usize,
     > EncoderParams<PE, COSET_N, LOG_COL, LOG_ROW>
-where
-    AMTParams<PE>: AMTProofs<PE = PE>,
+where AMTParams<PE>: AMTProofs<PE = PE>
 {
     pub fn new(amt_list: [AMTParams<PE>; COSET_N]) -> Self {
         Self::assert_validity();
@@ -80,9 +79,7 @@ where
         );
     }
 
-    pub const fn len() -> usize {
-        1 << (LOG_COL + LOG_ROW)
-    }
+    pub const fn len() -> usize { 1 << (LOG_COL + LOG_ROW) }
 
     pub fn warmup(&self) {
         for amt in self.amt_list.iter() {
@@ -168,8 +165,7 @@ pub struct HalfBlob<PE: Pairing, const LOG_COL: usize, const LOG_ROW: usize> {
 
 impl<PE: Pairing, const LOG_COL: usize, const LOG_ROW: usize>
     HalfBlob<PE, LOG_COL, LOG_ROW>
-where
-    AMTParams<PE>: AMTProofs<PE = PE>,
+where AMTParams<PE>: AMTProofs<PE = PE>
 {
     fn generate(mut points: Vec<Fr<PE>>, amt: &AMTParams<PE>) -> Self {
         index_reverse(&mut points);

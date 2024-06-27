@@ -1,31 +1,60 @@
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
 use std::collections::BTreeSet;
 
-use amt::change_matrix_direction;
 use ark_ff::{Field, One, Zero};
-use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
-use ark_std::{rand, UniformRand};
-use zg_encoder::constants::{Scalar, BLOB_COL_LOG, BLOB_COL_N, BLOB_ROW_LOG, COSET_N, RAW_BLOB_SIZE};
-
-use crate::{
-    data_times_zpoly::data_times_zpoly, error::RecoveryErr, poly::Poly, utils::{
-        coeffs_to_evals, coeffs_to_evals_larger, evals_to_poly, fx_to_fkx,
-    }, zpoly::{self, zpoly, COSET_MORE}
+use ark_std::{cfg_iter, rand, UniformRand};
+use zg_encoder::constants::{
+    Scalar, BLOB_ROW_ENCODED, BLOB_ROW_N, ENCODED_BLOB_SIZE, RAW_BLOB_SIZE,
 };
 
-const TRY_TIMES: usize = 1000;
+use crate::{
+    data_times_zpoly::data_times_zpoly,
+    error::RecoveryErr,
+    utils::{
+        coeffs_to_evals, coeffs_to_evals_larger, evals_to_poly, fx_to_fkx,
+    },
+    zpoly::{zpoly, COSET_MORE},
+};
 
 pub fn inverse_vec(vec: Vec<Scalar>) -> Option<Vec<Scalar>> {
-    vec.iter().map(|x| x.inverse()).collect()
+    cfg_iter!(vec).map(|x| x.inverse()).collect()
 }
 
+pub fn check_input(
+    row_ids: &BTreeSet<usize>, data_before_recovery: &[Scalar],
+) -> Result<(), RecoveryErr> {
+    if data_before_recovery.len() != ENCODED_BLOB_SIZE {
+        return Err(RecoveryErr::InvalidLength);
+    }
+    if !row_ids.is_empty() && row_ids.last().unwrap() >= &BLOB_ROW_ENCODED {
+        return Err(RecoveryErr::RowIdOverflow);
+    }
+    if row_ids.len() > BLOB_ROW_ENCODED - BLOB_ROW_N {
+        return Err(RecoveryErr::TooManyRowIds);
+    }
+    Ok(())
+}
+
+#[allow(dead_code)]
 pub fn data_poly(
-    line_ids: BTreeSet<usize>, data_before_recovery: &[Scalar],
+    row_ids: &BTreeSet<usize>, data_before_recovery: &[Scalar],
 ) -> Result<Vec<Scalar>, RecoveryErr> {
-    let zcoeffs = zpoly(line_ids.clone()).to_vec();
-    let data_times_zcoeffs = data_times_zpoly(line_ids, data_before_recovery, &zcoeffs).to_vec();
-    
+    check_input(row_ids, data_before_recovery)?;
+    const TRY_TIMES: usize = 100;
+
+    let zcoeffs = zpoly(row_ids).to_vec();
+
+    let data_times_zcoeffs =
+        data_times_zpoly(row_ids, data_before_recovery, &zcoeffs).to_vec();
+
+    assert!(zcoeffs.len() <= COSET_MORE * RAW_BLOB_SIZE);
+    assert!(data_times_zcoeffs.len() <= COSET_MORE * RAW_BLOB_SIZE);
+
     let mut rng = rand::thread_rng();
-    for _ in 0..TRY_TIMES {
+    for try_time in 0..TRY_TIMES {
+        dbg!(try_time);
         let k = Scalar::rand(&mut rng);
         if k == Scalar::zero() || k == Scalar::one() {
             continue;
@@ -37,14 +66,14 @@ pub fn data_poly(
                 let data_times_zcoeffs_kx = fx_to_fkx(&data_times_zcoeffs, k);
                 let data_times_z_kx_evals =
                     coeffs_to_evals_larger(&data_times_zcoeffs_kx);
-                let data_kx_evals: Vec<_> = data_times_z_kx_evals
-                    .iter()
-                    .zip(z_kx_evals_inverse.iter())
+                let data_kx_evals: Vec<_> = cfg_iter!(data_times_z_kx_evals)
+                    .zip(cfg_iter!(z_kx_evals_inverse))
                     .map(|(x, y)| x * y)
                     .collect();
                 let data_kx_coeffs = evals_to_poly(data_kx_evals).to_vec();
                 let data_coeffs = fx_to_fkx(&data_kx_coeffs, k_inverse);
                 assert!(data_coeffs.len() <= RAW_BLOB_SIZE + 1);
+
                 return Ok(coeffs_to_evals(&data_coeffs));
             }
         }
@@ -54,25 +83,27 @@ pub fn data_poly(
 
 #[cfg(test)]
 mod tests {
-    use crate::data_poly::data_poly;
-    use crate::data_times_zpoly::data_times_zpoly;
-    use crate::utils::{
-        coeffs_to_evals, coeffs_to_evals_larger, coeffs_to_evals_more,
-        evals_to_poly, random_scalars,
+    use crate::{
+        data_poly::data_poly,
+        error::RecoveryErr,
+        utils::{
+            coeffs_to_evals, coeffs_to_evals_larger, coeffs_to_evals_more,
+            evals_to_poly, random_scalars,
+        },
+        zpoly::COSET_MORE,
     };
-    use crate::zpoly::{zpoly, COSET_MORE};
     use amt::{change_matrix_direction, to_coset_blob};
     use ark_ff::Zero;
     use std::collections::BTreeSet;
     use zg_encoder::constants::{
-        Scalar, BLOB_COL_LOG, BLOB_COL_N, BLOB_ROW_ENCODED, BLOB_ROW_LOG,
-        BLOB_ROW_N, COSET_N, ENCODED_BLOB_SIZE, PE, RAW_BLOB_SIZE,
+        Scalar, BLOB_COL_LOG, BLOB_ROW_ENCODED, BLOB_ROW_LOG, BLOB_ROW_N,
+        COSET_N, ENCODED_BLOB_SIZE, PE, RAW_BLOB_SIZE,
     };
 
     fn check_data_poly(
-        line_ids: BTreeSet<usize>, data_before_recovery: &[Scalar],
+        row_ids: BTreeSet<usize>, data_before_recovery: &[Scalar],
     ) {
-        let evals = data_poly(line_ids, data_before_recovery).unwrap();
+        let evals = data_poly(&row_ids, data_before_recovery).unwrap();
 
         assert_eq!(data_before_recovery, evals);
     }
@@ -111,6 +142,18 @@ mod tests {
         check_data_poly(all.clone(), &data_before_recovery);
         all.remove(&(BLOB_ROW_N * 2 - 1));
         check_data_poly(all, &data_before_recovery);
+        all = (0..BLOB_ROW_ENCODED).step_by(2).collect();
+        check_data_poly(all, &data_before_recovery);
+        all = (0..BLOB_ROW_N * 2 + 1).collect();
+        assert_eq!(
+            data_poly(&all, &data_before_recovery),
+            Err(RecoveryErr::TooManyRowIds)
+        );
+        all = (BLOB_ROW_N..BLOB_ROW_ENCODED + 1).collect();
+        assert_eq!(
+            data_poly(&all, &data_before_recovery),
+            Err(RecoveryErr::RowIdOverflow)
+        );
     }
 
     #[test]
@@ -126,6 +169,7 @@ mod tests {
         assert!(coeffs.len() <= RAW_BLOB_SIZE);
         let evals_larger = coeffs_to_evals_larger(&coeffs);
         assert_eq!(evals_larger, data_before_recovery);
+        assert!(coeffs.len() <= COSET_MORE * RAW_BLOB_SIZE);
         let evals = coeffs_to_evals(&coeffs);
         assert_eq!(evals, evals_larger[..ENCODED_BLOB_SIZE]);
         let evals_more = coeffs_to_evals_more(&coeffs);

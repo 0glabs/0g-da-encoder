@@ -21,19 +21,13 @@ pub enum VerifierError {
 }
 
 impl From<EncoderError> for String {
-    fn from(error: EncoderError) -> String {
-        format!("{:?}", error)
-    }
+    fn from(error: EncoderError) -> String { format!("{:?}", error) }
 }
 
 impl From<AmtError> for VerifierError {
-    fn from(error: AmtError) -> Self {
-        VerifierError::AMT(error)
-    }
+    fn from(error: AmtError) -> Self { VerifierError::AMT(error) }
 }
 
 impl From<MerkleError> for VerifierError {
-    fn from(error: MerkleError) -> Self {
-        VerifierError::Merkle(error)
-    }
+    fn from(error: MerkleError) -> Self { VerifierError::Merkle(error) }
 }
