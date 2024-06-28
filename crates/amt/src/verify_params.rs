@@ -1,15 +1,19 @@
 use std::{fs::File, path::Path};
 
-use crate::{amtp_verify_file_name, error, AMTParams};
+use crate::{
+    amtp_verify_file_name,
+    deferred_verification::{DeferredVerifier, PairingTask},
+    error, AMTParams,
+};
 
-use crate::ec_algebra::{Fr, G1Aff, G2Aff, Pairing, G1, G2};
+use crate::ec_algebra::{Fr, G1Aff, G2Aff, Pairing, G1};
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use tracing::{debug, info, instrument};
 
 use crate::proofs::{AmtProofError, Proof};
 
-use ark_ec::VariableBaseMSM;
+use ark_ec::{AffineRepr, VariableBaseMSM};
 
 #[cfg(not(feature = "cuda-bls12-381"))]
 use ark_bn254::Bn254;
@@ -18,8 +22,8 @@ use ark_bn254::Bn254;
 pub struct AMTVerifyParams<PE: Pairing> {
     pub basis: Vec<G1Aff<PE>>,
     pub vanishes: Vec<Vec<G2Aff<PE>>>,
-    pub g2: G2<PE>,
-    pub high_g2: G2<PE>,
+    pub g2: G2Aff<PE>,
+    pub high_g2: G2Aff<PE>,
 }
 
 #[cfg(not(feature = "cuda-bls12-381"))]
@@ -110,6 +114,7 @@ where G1<PE>: VariableBaseMSM<MulBase = G1Aff<PE>>
     pub fn verify_proof(
         &self, ri_data: &[Fr<PE>], batch_index: usize, proof: &Proof<PE>,
         high_commitment: G1<PE>, commitment: G1<PE>,
+        deferred_verifier: Option<DeferredVerifier<PE>>,
     ) -> Result<(), AmtProofError> {
         verify_amt_proof(
             &self.basis,
@@ -121,6 +126,7 @@ where G1<PE>: VariableBaseMSM<MulBase = G1Aff<PE>>
             &self.g2,
             high_commitment,
             &self.high_g2,
+            deferred_verifier,
         )
     }
 }
@@ -128,13 +134,16 @@ where G1<PE>: VariableBaseMSM<MulBase = G1Aff<PE>>
 #[allow(clippy::too_many_arguments)]
 pub fn verify_amt_proof<PE: Pairing>(
     basis: &[G1Aff<PE>], vanishes: &[Vec<G2Aff<PE>>], ri_data: &[Fr<PE>],
-    batch_index: usize, proof: &Proof<PE>, commitment: G1<PE>, g2: &G2<PE>,
-    high_commitment: G1<PE>, high_g2: &G2<PE>,
+    batch_index: usize, proof: &Proof<PE>, commitment: G1<PE>, g2: &G2Aff<PE>,
+    high_commitment: G1<PE>, high_g2: &G2Aff<PE>,
+    deferred_verifier: Option<DeferredVerifier<PE>>,
 ) -> Result<(), AmtProofError>
 where
     G1<PE>: VariableBaseMSM<MulBase = G1Aff<PE>>,
 {
     use AmtProofError::*;
+
+    let mut task_collector = deferred_verifier.is_some().then_some(vec![]);
 
     let proof_depth = proof.len();
     let num_batch = 1 << proof_depth;
@@ -158,16 +167,44 @@ where
     for (d, (commitment, quotient)) in proof.iter().enumerate().rev() {
         let vanish_index = batch_index >> (proof_depth - 1 - d);
         let vanish = vanishes[d][vanish_index ^ 1];
-        if PE::pairing(commitment, g2) != PE::pairing(quotient, vanish) {
-            return Err(KzgError(d));
-        }
+        pairing_check::<PE>(
+            &mut task_collector,
+            commitment.into_group(),
+            *g2,
+            quotient.into_group(),
+            vanish,
+            KzgError(d),
+        )?;
         overall_commitment += commitment;
     }
     if overall_commitment != commitment {
         return Err(InconsistentCommitment);
     }
-    if PE::pairing(commitment, high_g2) != PE::pairing(high_commitment, g2) {
-        Err(FailedLowDegreeTest)
+    pairing_check::<PE>(
+        &mut task_collector,
+        high_commitment,
+        *g2,
+        commitment,
+        *high_g2,
+        FailedLowDegreeTest,
+    )?;
+
+    if let Some(verifier) = deferred_verifier {
+        verifier.record_pairing(task_collector.unwrap());
+    }
+
+    Ok(())
+}
+
+fn pairing_check<PE: Pairing>(
+    task_collector: &mut Option<Vec<PairingTask<PE>>>, a: G1<PE>, b: G2Aff<PE>,
+    c: G1<PE>, d: G2Aff<PE>, error: AmtProofError,
+) -> Result<(), AmtProofError> {
+    if let Some(collector) = task_collector {
+        collector.push((a, b, c, d, error));
+        Ok(())
+    } else if PE::pairing(a, b) != PE::pairing(c, d) {
+        Err(error)
     } else {
         Ok(())
     }

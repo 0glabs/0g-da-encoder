@@ -43,7 +43,7 @@ impl<PE: Pairing> Deref for Proof<PE> {
     fn deref(&self) -> &Self::Target { &self.0 }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum AmtProofError {
     UnexpectedDataLength,
     IncorrectPosition,

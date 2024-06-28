@@ -6,7 +6,7 @@ use crate::{
     },
     ZgSignerParams,
 };
-use amt::{BlobRow, Proof};
+use amt::{BlobRow, DeferredVerifier, Proof};
 use ark_ec::AffineRepr;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
@@ -51,7 +51,9 @@ impl EncodedSliceAMT {
     pub(crate) fn row(&self) -> &Vec<Scalar> { &self.row.row }
 
     pub(crate) fn verify(
-        &self, encoder_amt: &ZgSignerParams, authoritative_commitment: &G1Curve,
+        &self, encoder_amt: &ZgSignerParams,
+        authoritative_commitment: &G1Curve,
+        deferred_verifier: Option<DeferredVerifier<PE>>,
     ) -> Result<(), AmtError> {
         // verify authoritative_commitment
         if &self.commitment.into_group() != authoritative_commitment {
@@ -86,7 +88,11 @@ impl EncodedSliceAMT {
         }
 
         self.row
-            .verify(&encoder_amt.amt_list[coset_idx], self.commitment.into())
+            .verify(
+                &encoder_amt.amt_list[coset_idx],
+                self.commitment.into(),
+                deferred_verifier,
+            )
             .map_err(|err| AmtError::IncorrectProof {
                 coset_index: coset_idx,
                 amt_index: self.row.index,

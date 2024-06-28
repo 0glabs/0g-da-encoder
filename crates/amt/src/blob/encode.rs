@@ -10,6 +10,7 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use rayon::prelude::*;
 
 use crate::{
+    deferred_verification::DeferredVerifier,
     ec_algebra::{FftField, Field, Fr, G1Aff, Pairing, G1},
     proofs::{AllProofs, AmtProofError, Proof},
     prove_params::AMTProofs,
@@ -223,6 +224,7 @@ impl<PE: Pairing, const LOG_COL: usize, const LOG_ROW: usize>
 {
     pub fn verify(
         &self, amt: &AMTVerifyParams<PE>, commitment: G1<PE>,
+        deferred_verifier: Option<DeferredVerifier<PE>>,
     ) -> Result<(), AmtProofError> {
         let mut data = self.row.clone();
 
@@ -234,6 +236,7 @@ impl<PE: Pairing, const LOG_COL: usize, const LOG_ROW: usize>
             &self.proof,
             self.high_commitment.into(),
             commitment,
+            deferred_verifier,
         )
     }
 }
@@ -298,14 +301,14 @@ mod tests {
         for index in 0..(1 << LOG_ROW) {
             let commitment = primary_blob.commitment;
             let row = primary_blob.get_row(index);
-            row.verify(&VERIFIER.amt_list[0], commitment.into())
+            row.verify(&VERIFIER.amt_list[0], commitment.into(), None)
                 .unwrap();
         }
 
         for index in 0..(1 << LOG_ROW) {
             let commitment = coset_blob.commitment;
             let row = coset_blob.get_row(index);
-            row.verify(&VERIFIER.amt_list[1], commitment.into())
+            row.verify(&VERIFIER.amt_list[1], commitment.into(), None)
                 .unwrap();
         }
     }

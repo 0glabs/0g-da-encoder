@@ -6,7 +6,7 @@ use ark_std::cfg_iter;
 use rayon::prelude::*;
 
 use crate::ec_algebra::{AffineRepr, CurveGroup, Fr, G1Aff, G1};
-use ag_types::{GpuRepr, PrimeFieldRepr};
+use ag_types::PrimeFieldRepr;
 use parking_lot::{
     RwLockReadGuard as ReadGuard, RwLockUpgradableReadGuard as LockGuard,
     RwLockWriteGuard as WriteGuard,
@@ -25,10 +25,6 @@ fn aggregate_line(line: &[G1<PE>], chunk_size: usize) -> Vec<G1Aff<PE>> {
             .collect()
     };
     CurveGroup::normalize_batch(&aggregated)
-}
-
-fn affine_size() -> usize {
-    std::mem::size_of::<<G1Aff<PE> as GpuRepr>::Repr>()
 }
 
 impl AMTParams<PE> {
@@ -75,7 +71,7 @@ impl AMTParams<PE> {
             .map(PrimeFieldRepr::to_bigint)
             .collect();
 
-        assert_eq!(gpu_bases.size(), input_len * (height + 2) * affine_size());
+        assert_eq!(gpu_bases.size(), input_len * (height + 2));
         assert_eq!(exponents.len(), input_len);
 
         let lines: Vec<_> = multiple_multiexp_mt(
@@ -127,7 +123,9 @@ impl AMTParams<PE> {
     }
 }
 
-pub(crate) struct MsmBasisOnDevice(ag_cuda_ec::DeviceData);
+pub(crate) struct MsmBasisOnDevice(
+    ag_cuda_ec::multiexp::DeviceAffineSlice<G1Aff<PE>>,
+);
 
 // A raw GPU pointer is inside
 // `MsmBasisOnDevice`, since we only

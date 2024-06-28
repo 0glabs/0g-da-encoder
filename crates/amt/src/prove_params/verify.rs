@@ -25,6 +25,7 @@ where G1<PE>: VariableBaseMSM<MulBase = G1Aff<PE>>
             &self.g2,
             high_commitment,
             &self.high_g2,
+            None,
         )
     }
 }

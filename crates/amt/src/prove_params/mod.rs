@@ -14,6 +14,9 @@ pub mod tests;
 use crate::ec_algebra::{G1Aff, G2Aff, Pairing, G2};
 
 pub use interfaces::AMTProofs;
+
+use ark_ec::CurveGroup;
+
 #[cfg(feature = "cuda")]
 use parking_lot::RwLock;
 
@@ -21,9 +24,9 @@ pub struct AMTParams<PE: Pairing> {
     pub basis: Vec<G1Aff<PE>>,
     pub quotients: Vec<Vec<G1Aff<PE>>>,
     pub vanishes: Vec<Vec<G2Aff<PE>>>,
-    pub g2: G2<PE>,
+    pub g2: G2Aff<PE>,
     pub high_basis: Vec<G1Aff<PE>>,
-    pub high_g2: G2<PE>,
+    pub high_g2: G2Aff<PE>,
     #[cfg(feature = "cuda")]
     device_mem: RwLock<Option<prove_gpu::MsmBasisOnDevice>>,
 }
@@ -38,9 +41,9 @@ impl<PE: Pairing> AMTParams<PE> {
             basis,
             quotients,
             vanishes,
-            g2,
+            g2: g2.into_affine(),
             high_basis,
-            high_g2,
+            high_g2: high_g2.into_affine(),
             #[cfg(feature = "cuda")]
             device_mem: RwLock::new(None),
         }
@@ -51,9 +54,9 @@ impl<PE: Pairing> AMTParams<PE> {
             self.basis.clone(),
             self.quotients[..depth].to_vec(),
             self.vanishes[..depth].to_vec(),
-            self.g2,
+            self.g2.into(),
             self.high_basis.clone(),
-            self.high_g2,
+            self.high_g2.into(),
         )
     }
 }

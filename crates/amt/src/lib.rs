@@ -2,6 +2,7 @@
 extern crate tracing;
 
 mod blob;
+mod deferred_verification;
 pub mod ec_algebra;
 mod error;
 mod power_tau;
@@ -14,6 +15,7 @@ pub use blob::{
     encode::{BlobRow, EncoderParams, HalfBlob},
     verify::VerifierParams,
 };
+pub use deferred_verification::DeferredVerifier;
 pub use power_tau::PowerTau;
 pub use proofs::{AmtProofError, Proof};
 pub use prove_params::AMTParams;

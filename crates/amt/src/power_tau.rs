@@ -31,8 +31,9 @@ fn power_tau<'a, G: AffineRepr>(
     let gen: G::Group = gen.into_group();
     cfg_into_iter!(0usize..length)
         .step_by(1024)
-        .flat_map(|x| {
-            let project_tau: Vec<_> = (x..std::cmp::min(x + 1024, length))
+        .flat_map(|start| {
+            let end = std::cmp::min(start + 1024, length);
+            let project_tau: Vec<_> = (start..end)
                 .map(|idx| gen * tau.pow([idx as u64]))
                 .collect();
             CurveGroup::normalize_batch(&project_tau[..])

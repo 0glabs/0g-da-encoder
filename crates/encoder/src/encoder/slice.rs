@@ -6,7 +6,7 @@ use crate::{
     utils::scalar_to_h256,
     ZgSignerParams,
 };
-use amt::Proof;
+use amt::{DeferredVerifier, Proof};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::cfg_iter;
 #[cfg(feature = "parallel")]
@@ -73,6 +73,7 @@ impl EncodedSlice {
     pub fn verify(
         &self, encoder_amt: &ZgSignerParams,
         authoritative_commitment: &G1Curve, authoritative_root: &[u8; 32],
+        deferred_verifier: Option<DeferredVerifier<PE>>,
     ) -> Result<(), VerifierError> {
         // consistency between amt and merkle
         // index consistency
@@ -83,7 +84,11 @@ impl EncodedSlice {
         let row_merkle: Vec<_> =
             row_amt.iter().map(|x| scalar_to_h256(*x)).collect();
         // verify amt, merkle
-        self.amt.verify(encoder_amt, authoritative_commitment)?;
+        self.amt.verify(
+            encoder_amt,
+            authoritative_commitment,
+            deferred_verifier,
+        )?;
         self.merkle.verify(authoritative_root, row_merkle)?;
         Ok(())
     }

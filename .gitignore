@@ -3,6 +3,6 @@ target
 .DS_Store
 .vscode
 
-crates/amt/pp/*
+crates/amt/pp
 crates/ppot2ark/data
 params

@@ -207,6 +207,7 @@ impl EncodedBlob {
                     &encoder_amt,
                     &authoritative_commitment,
                     &authoritative_root,
+                    None,
                 )
                 .unwrap();
         }
@@ -220,6 +221,7 @@ impl EncodedBlob {
                     &encoder_amt,
                     &authoritative_commitment,
                     &authoritative_root,
+                    None,
                 );
                 assert_eq!(err_signer.as_ref(), Err(expected_err_signer));
             }
@@ -237,9 +239,10 @@ mod tests {
         raw_data::RawData,
         ZgEncoderParams, ZgSignerParams,
     };
-    use amt::{EncoderParams, VerifierParams};
+    use amt::{DeferredVerifier, EncoderParams, VerifierParams};
+    use ark_bn254::Bn254;
     use once_cell::sync::Lazy;
-    use rand::{rngs::StdRng, Rng, SeedableRng};
+    use rand::{rngs::StdRng, thread_rng, Rng, SeedableRng};
     use test_case::test_case;
 
     static ENCODER: Lazy<ZgEncoderParams> =
@@ -287,5 +290,37 @@ mod tests {
         encoded_blob.test_verify(&SIGNER);
 
         Ok(())
+    }
+
+    #[test]
+    fn test_deferred_verify() {
+        let deferred_verifier = DeferredVerifier::<Bn254>::new();
+
+        let mut data = vec![0u8; MAX_BLOB_SIZE];
+        thread_rng().fill(&mut data[..]);
+        let raw_data: RawData = data[..].try_into().unwrap();
+        let raw_blob: RawBlob = raw_data.into();
+
+        let encoded_blob = EncodedBlob::build(&raw_blob, &*ENCODER);
+
+        let commitment = encoded_blob.get_commitment();
+        let root = encoded_blob.get_file_root();
+        let slices: Vec<_> = (0..BLOB_ROW_ENCODED)
+            .map(|i| encoded_blob.get_row(i))
+            .collect();
+
+        for slice in slices {
+            slice
+                .verify(
+                    &*SIGNER,
+                    &commitment,
+                    &root,
+                    Some(deferred_verifier.clone()),
+                )
+                .unwrap();
+        }
+
+        assert!(deferred_verifier.fast_check());
+        deferred_verifier.check().unwrap();
     }
 }

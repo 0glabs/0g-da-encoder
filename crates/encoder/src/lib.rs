@@ -1,3 +1,5 @@
+extern crate amt as amt_crate;
+
 mod amt;
 pub mod constants;
 mod encoder;
@@ -5,6 +7,8 @@ mod merkle;
 mod raw_blob;
 mod raw_data;
 mod utils;
+
+pub use amt_crate::DeferredVerifier;
 
 pub use amt::{blob::EncodedBlobAMT, slice::EncodedSliceAMT};
 pub use encoder::{

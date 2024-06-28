@@ -23,7 +23,7 @@ ark-bls12-381 = "0.4"
 parking_lot = { version = "0.12", optional = true }
 
 ag-types = { workspace = true, optional = true }
-ag-cuda-ec = { workspace = true, optional = true }
+ag-cuda-ec = { workspace = true, optional = true, features = ["g1-fft", "g2-fft", "g1-msm"] }
 
 anyhow = "1"
 tracing = "0.1.40"

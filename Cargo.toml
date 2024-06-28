@@ -14,12 +14,12 @@ grpc = { path = "./grpc" }
 server = { path = "./server" } 
 zg-encoder = { path = "./crates/encoder" }
 
-ag-types = { git = "https://github.com/0glabs/0g-ec-gpu.git", rev = "f39b4b0f4c8b3dc28a09bd09802c5a88ae56c3b8" }
-ag-cuda-ec = { git = "https://github.com/0glabs/0g-ec-gpu.git", rev = "f39b4b0f4c8b3dc28a09bd09802c5a88ae56c3b8", default-features = false }
+ag-types = { git = "https://github.com/0glabs/0g-ec-gpu.git", rev = "6ceca01ae330209227b3681788bfb9c85fbd3186" }
+ag-cuda-ec = { git = "https://github.com/0glabs/0g-ec-gpu.git", rev = "6ceca01ae330209227b3681788bfb9c85fbd3186", default-features = false }
 
 # Path for develop
 # ag-types = { path = "../0g-ec-gpu/ag-types" }
-# ag-cuda-ec = { path = "../0g-ec-gpu/ag-cuda-ec" }
+# ag-cuda-ec = { path = "../0g-ec-gpu/ag-cuda-ec", default-features = false }
 
 
 ark-ff = "0.4.0"

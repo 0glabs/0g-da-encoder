@@ -11,19 +11,20 @@ use zg_encoder::{
 fn signer(
     encoded_slice: &EncodedSlice, signer_service: &SignerService,
     authoritative_commitment: &G1Curve, authoritative_root: &[u8; 32],
-) -> () {
+) {
     encoded_slice
         .verify(
             &signer_service.params,
             &authoritative_commitment,
             &authoritative_root,
+            None,
         )
         .unwrap()
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
     let param_dir = "../crates/amt/pp";
-    let encoder_service = EncoderService::new(param_dir);
+    let encoder_service = EncoderService::new_for_test(param_dir);
     let num_bytes = RAW_UNIT * BLOB_ROW_N * BLOB_COL_N;
     // generate input
     let seed = 222u64;

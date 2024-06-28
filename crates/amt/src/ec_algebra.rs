@@ -51,12 +51,12 @@ impl<PE: ark_ec::pairing::Pairing> Pairing for PE {}
 #[cfg(feature = "cuda")]
 mod cuda_accelerate {
     use super::{Fr, Pairing, G1};
-    use ag_cuda_ec::{ec_fft::radix_ec_fft_mt, pairing_suite::PE};
+    use ag_cuda_ec::{
+        fft::{radix_fft_mt, radix_ifft_mt},
+        pairing_suite::PE,
+    };
     use ark_ff::Field;
-    use ark_std::{cfg_iter_mut, Zero};
-
-    #[cfg(feature = "parallel")]
-    use rayon::prelude::*;
+    use ark_std::Zero;
 
     fn make_omegas(group_gen: Fr<PE>) -> Vec<Fr<PE>> {
         let mut omegas = vec![Fr::<PE>::zero(); 32];
@@ -73,7 +73,7 @@ mod cuda_accelerate {
             input: &[G1<Self>],
         ) -> Vec<G1<Self>> {
             let mut answer = input.to_vec();
-            radix_ec_fft_mt(&mut answer, &make_omegas(fft_domain.group_gen))
+            radix_fft_mt(&mut answer, &make_omegas(fft_domain.group_gen), None)
                 .unwrap();
             answer
         }
@@ -83,13 +83,13 @@ mod cuda_accelerate {
             input: &[G1<Self>],
         ) -> Vec<G1<Self>> {
             let mut answer = input.to_vec();
-            radix_ec_fft_mt(
+            radix_ifft_mt(
                 &mut answer,
                 &make_omegas(fft_domain.group_gen_inv),
+                None,
+                fft_domain.size_inv,
             )
             .unwrap();
-            cfg_iter_mut!(answer, 1024)
-                .for_each(|val: &mut G1<PE>| *val *= fft_domain.size_inv);
             answer
         }
     }
