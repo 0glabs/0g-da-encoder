@@ -24,3 +24,6 @@ pub use verify_params::AMTVerifyParams;
 
 #[cfg(not(feature = "cuda-bls12-381"))]
 pub use prove_params::fast_serde_bn254;
+
+pub use blob::encode::to_coset_blob;
+pub use utils::{bitreverse, change_matrix_direction};

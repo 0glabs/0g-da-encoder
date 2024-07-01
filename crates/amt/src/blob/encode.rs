@@ -132,7 +132,9 @@ impl<const COSET_N: usize, const LOG_COL: usize, const LOG_ROW: usize>
     }
 }
 
-fn to_coset_blob<PE: Pairing>(data: &[Fr<PE>], coset: usize) -> Vec<Fr<PE>> {
+pub fn to_coset_blob<PE: Pairing>(
+    data: &[Fr<PE>], coset: usize,
+) -> Vec<Fr<PE>> {
     if coset == 0 {
         return data.to_vec();
     }

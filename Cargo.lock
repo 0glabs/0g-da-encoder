@@ -2259,6 +2259,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "recovery"
+version = "0.1.0"
+dependencies = [
+ "amt",
+ "ark-ff",
+ "ark-poly",
+ "ark-std",
+ "rand 0.8.5",
+ "rayon",
+ "zg-encoder",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

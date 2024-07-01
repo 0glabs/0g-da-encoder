@@ -87,7 +87,7 @@ pub fn index_reverse<T: Sync>(input: &mut [T]) {
     })
 }
 
-pub(crate) fn change_matrix_direction<T: Clone>(
+pub fn change_matrix_direction<T: Clone>(
     input: &mut Vec<T>, log_current: usize, log_next: usize,
 ) {
     let n = input.len();
