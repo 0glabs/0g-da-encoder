@@ -28,20 +28,24 @@ impl Poly {
     pub fn degree(&self) -> usize {
         match self {
             Poly::One(_) => 0,
-            Poly::Sparse(inner) => {
-                if inner.is_empty() {
-                    0
-                } else {
-                    *inner.last_key_value().unwrap().0
-                }
-            }
+            Poly::Sparse(inner) => inner.last_key_value().map_or(0, |x| *x.0),
+            Poly::Dense(inner) => inner.len().saturating_sub(1),
+        }
+    }
+
+    pub fn is_one(&self) -> bool {
+        if self.degree() != 0 {
+            return false;
+        }
+
+        match self {
             Poly::Dense(inner) => {
-                if inner.is_empty() {
-                    0
-                } else {
-                    inner.len() - 1
-                }
+                inner.first().map_or(false, |v| *v == Scalar::one())
             }
+            Poly::Sparse(inner) => {
+                inner.get(&0).map_or(false, |v| *v == Scalar::one())
+            }
+            Poly::One(_) => true,
         }
     }
 }
@@ -61,7 +65,6 @@ impl Poly {
         if sparse_complexity < dense_complexity {
             self.multiply_sparse(other, res_degree)
         } else {
-            dbg!("dense");
             self.multiply_dense(other, res_degree)
         }
     }
@@ -69,61 +72,72 @@ impl Poly {
     fn multiply_sparse(&self, other: &Poly, res_degree: usize) -> Poly {
         match (self, other) {
             (Poly::Dense(dense_1), Poly::Dense(dense_2)) => {
-                let mut res = vec![Scalar::zero(); res_degree + 1];
-                for (dense_idx_1, dense_coeff_1) in dense_1.iter().enumerate() {
-                    for (dense_idx_2, dense_coeff_2) in
-                        dense_2.iter().enumerate()
-                    {
-                        res[dense_idx_1 + dense_idx_2] +=
-                            dense_coeff_1 * dense_coeff_2;
-                    }
-                }
-                assert_ne!(res[res_degree], Scalar::zero());
-                Poly::from_vec(res)
+                Self::mul_dense_by_dense(dense_1, dense_2, res_degree)
             }
 
             (Poly::Dense(dense), Poly::Sparse(sparse))
             | (Poly::Sparse(sparse), Poly::Dense(dense)) => {
-                let mut res = vec![Scalar::zero(); res_degree + 1];
-                for (dense_idx, dense_coeff) in dense.iter().enumerate() {
-                    for (sparse_idx, sparse_coeff) in sparse {
-                        res[dense_idx + sparse_idx] +=
-                            dense_coeff * sparse_coeff;
-                    }
-                }
-                Poly::from_vec(res)
+                Self::mul_dense_by_sparse(dense, sparse, res_degree)
             }
 
             (Poly::Sparse(sparse_1), Poly::Sparse(sparse_2)) => {
-                let mut res = BTreeMap::new();
-                for (idx_1, coeff_1) in sparse_1 {
-                    for (idx_2, coeff_2) in sparse_2 {
-                        let idx = idx_1 + idx_2;
-                        let coeff = coeff_1 * coeff_2;
-                        res.entry(idx)
-                            .and_modify(|curr_coeff| *curr_coeff += coeff)
-                            .or_insert(coeff);
-                    }
-                }
-                if !res.is_empty() {
-                    assert_ne!(
-                        *res.last_key_value().unwrap().1,
-                        Scalar::zero()
-                    );
-                }
-                let keys_to_remove: Vec<usize> = res
-                    .iter()
-                    .filter(|&(_, value)| *value == Scalar::zero())
-                    .map(|(&key, _)| key)
-                    .collect();
-                for key in keys_to_remove {
-                    res.remove(&key);
-                }
-                Poly::Sparse(res)
+                Self::mul_sparse_by_sparse(sparse_1, sparse_2)
             }
 
-            _ => panic!("Poly::One should not invoke multiply_sparse"),
+            _ => unreachable!("Poly::One should not invoke multiply_sparse"),
         }
+    }
+
+    fn mul_dense_by_dense(
+        dense_1: &[Scalar], dense_2: &[Scalar], res_degree: usize,
+    ) -> Poly {
+        let mut res = vec![Scalar::zero(); res_degree + 1];
+        for (dense_idx_1, dense_coeff_1) in dense_1.iter().enumerate() {
+            for (dense_idx_2, dense_coeff_2) in dense_2.iter().enumerate() {
+                res[dense_idx_1 + dense_idx_2] += dense_coeff_1 * dense_coeff_2;
+            }
+        }
+        assert_ne!(res[res_degree], Scalar::zero());
+        Poly::from_vec(res)
+    }
+
+    fn mul_dense_by_sparse(
+        dense: &[Scalar], sparse: &BTreeMap<usize, Scalar>, res_degree: usize,
+    ) -> Poly {
+        let mut res = vec![Scalar::zero(); res_degree + 1];
+        for (dense_idx, dense_coeff) in dense.iter().enumerate() {
+            for (sparse_idx, sparse_coeff) in sparse {
+                res[dense_idx + sparse_idx] += dense_coeff * sparse_coeff;
+            }
+        }
+        Poly::from_vec(res)
+    }
+
+    fn mul_sparse_by_sparse(
+        sparse_1: &BTreeMap<usize, Scalar>, sparse_2: &BTreeMap<usize, Scalar>,
+    ) -> Poly {
+        let mut res = BTreeMap::new();
+        for (idx_1, coeff_1) in sparse_1 {
+            for (idx_2, coeff_2) in sparse_2 {
+                let idx = idx_1 + idx_2;
+                let coeff = coeff_1 * coeff_2;
+                res.entry(idx)
+                    .and_modify(|curr_coeff| *curr_coeff += coeff)
+                    .or_insert(coeff);
+            }
+        }
+        if !res.is_empty() {
+            assert_ne!(*res.last_key_value().unwrap().1, Scalar::zero());
+        }
+        let keys_to_remove: Vec<usize> = res
+            .iter()
+            .filter(|&(_, value)| *value == Scalar::zero())
+            .map(|(&key, _)| key)
+            .collect();
+        for key in keys_to_remove {
+            res.remove(&key);
+        }
+        Poly::Sparse(res)
     }
 
     fn multiply_dense(&self, other: &Poly, res_degree: usize) -> Poly {
@@ -217,7 +231,7 @@ impl Poly {
                 }
                 res
             }
-            _ => panic!("Poly::One should not invoke to_vec_extend"),
+            _ => unreachable!("Poly::One should not invoke to_vec_extend"),
         }
     }
 
@@ -258,21 +272,8 @@ impl PartialEq for Poly {
             return false;
         }
         match (self, other) {
-            (Self::One(_), Self::Dense(inner))
-            | (Self::Dense(inner), Self::One(_)) => {
-                if inner.is_empty() {
-                    false
-                } else {
-                    inner[0] == Scalar::one()
-                }
-            }
-            (Self::One(_), Self::Sparse(inner))
-            | (Self::Sparse(inner), Self::One(_)) => {
-                if let Some(value) = inner.get(&0) {
-                    *value == Scalar::one()
-                } else {
-                    false
-                }
+            (Self::One(_), another) | (another, Self::One(_)) => {
+                another.is_one()
             }
             _ => {
                 let self_inner = self.to_vec_extend(degree + 1);

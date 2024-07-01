@@ -17,16 +17,10 @@ use crate::{poly::Poly, zpoly::COSET_MORE};
 
 const SPARSE_THRES: usize = 100;
 pub fn many_non_zeros(vec: &[Scalar]) -> bool {
-    let mut num_non_zeros = 0;
-    for scalar in vec {
-        if *scalar != Scalar::zero() {
-            num_non_zeros += 1;
-            if num_non_zeros > SPARSE_THRES {
-                return true;
-            }
-        }
-    }
-    false
+    vec.iter()
+        .filter(|x| x != &&Scalar::zero())
+        .nth(SPARSE_THRES - 1)
+        .is_some()
 }
 
 #[cfg(test)]
@@ -51,14 +45,14 @@ pub fn fx_to_fkx(coeffs_fx: &[Scalar], k: Scalar) -> Vec<Scalar> {
     coeffs
 }
 
-fn coeffs_to_evals_coset(_coeffs: &[Scalar], coset_idx: usize) -> Vec<Scalar> {
+fn coeffs_to_evals_coset(coeffs: &[Scalar], coset_idx: usize) -> Vec<Scalar> {
     let coeffs = {
         if coset_idx != 0 {
             let coset_w =
                 AMTParams::<PE>::coset_factor(RAW_BLOB_SIZE, coset_idx);
-            fx_to_fkx(_coeffs, coset_w)
+            fx_to_fkx(coeffs, coset_w)
         } else {
-            _coeffs.to_vec()
+            coeffs.to_vec()
         }
     };
 

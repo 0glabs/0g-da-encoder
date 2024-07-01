@@ -34,11 +34,10 @@ pub fn data_times_zpoly(
             *erasured = Scalar::zero();
         }
     }
-    data_times_z = [
-        data_times_z,
-        vec![Scalar::zero(); (COSET_MORE - COSET_N) * RAW_BLOB_SIZE],
-    ]
-    .concat();
+    data_times_z.extend(
+        std::iter::repeat(Scalar::zero())
+            .take((COSET_MORE - COSET_N) * RAW_BLOB_SIZE),
+    );
 
     assert!(zcoeffs.len() <= COSET_MORE * RAW_BLOB_SIZE + 1);
     let zevals = coeffs_to_evals_larger(zcoeffs);

@@ -3,7 +3,7 @@ use rayon::prelude::*;
 
 use std::collections::BTreeSet;
 
-use ark_ff::{Field, One, Zero};
+use ark_ff::{batch_inversion, Field, One, Zero};
 use ark_std::{cfg_iter, rand, UniformRand};
 use zg_encoder::constants::{
     Scalar, BLOB_ROW_ENCODED, BLOB_ROW_N, ENCODED_BLOB_SIZE, RAW_BLOB_SIZE,
@@ -18,11 +18,15 @@ use crate::{
     zpoly::{zpoly, COSET_MORE},
 };
 
-pub fn inverse_vec(vec: Vec<Scalar>) -> Option<Vec<Scalar>> {
-    cfg_iter!(vec).map(|x| x.inverse()).collect()
+fn inverse_vec_checked(input: &mut [Scalar]) -> bool {
+    if cfg_iter!(input, 65536).any(|x| x.is_zero()) {
+        return false;
+    }
+    batch_inversion(input);
+    true
 }
 
-pub fn check_input(
+fn check_input(
     row_ids: &BTreeSet<usize>, data_before_recovery: &[Scalar],
 ) -> Result<(), RecoveryErr> {
     if data_before_recovery.len() != ENCODED_BLOB_SIZE {
@@ -37,7 +41,6 @@ pub fn check_input(
     Ok(())
 }
 
-#[allow(dead_code)]
 pub fn data_poly(
     row_ids: &BTreeSet<usize>, data_before_recovery: &[Scalar],
 ) -> Result<Vec<Scalar>, RecoveryErr> {
@@ -53,30 +56,34 @@ pub fn data_poly(
     assert!(data_times_zcoeffs.len() <= COSET_MORE * RAW_BLOB_SIZE);
 
     let mut rng = rand::thread_rng();
-    for try_time in 0..TRY_TIMES {
-        dbg!(try_time);
+    for _ in 0..TRY_TIMES {
         let k = Scalar::rand(&mut rng);
         if k == Scalar::zero() || k == Scalar::one() {
             continue;
         }
-        if let Some(k_inverse) = k.inverse() {
-            let zcoeffs_kx = fx_to_fkx(&zcoeffs, k);
-            let z_kx_evals = coeffs_to_evals_larger(&zcoeffs_kx);
-            if let Some(z_kx_evals_inverse) = inverse_vec(z_kx_evals) {
-                let data_times_zcoeffs_kx = fx_to_fkx(&data_times_zcoeffs, k);
-                let data_times_z_kx_evals =
-                    coeffs_to_evals_larger(&data_times_zcoeffs_kx);
-                let data_kx_evals: Vec<_> = cfg_iter!(data_times_z_kx_evals)
-                    .zip(cfg_iter!(z_kx_evals_inverse))
-                    .map(|(x, y)| x * y)
-                    .collect();
-                let data_kx_coeffs = evals_to_poly(data_kx_evals).to_vec();
-                let data_coeffs = fx_to_fkx(&data_kx_coeffs, k_inverse);
-                assert!(data_coeffs.len() <= RAW_BLOB_SIZE + 1);
+        let k_inverse = k.inverse().unwrap();
 
-                return Ok(coeffs_to_evals(&data_coeffs));
-            }
+        let zcoeffs_kx = fx_to_fkx(&zcoeffs, k);
+        let mut z_kx_evals = coeffs_to_evals_larger(&zcoeffs_kx);
+        let success = inverse_vec_checked(&mut z_kx_evals);
+        if !success {
+            continue;
         }
+
+        let z_kx_evals_inverse = z_kx_evals;
+
+        let data_times_zcoeffs_kx = fx_to_fkx(&data_times_zcoeffs, k);
+        let data_times_z_kx_evals =
+            coeffs_to_evals_larger(&data_times_zcoeffs_kx);
+        let data_kx_evals: Vec<_> = cfg_iter!(data_times_z_kx_evals)
+            .zip(cfg_iter!(z_kx_evals_inverse))
+            .map(|(x, y)| x * y)
+            .collect();
+        let data_kx_coeffs = evals_to_poly(data_kx_evals).to_vec();
+        let data_coeffs = fx_to_fkx(&data_kx_coeffs, k_inverse);
+        assert!(data_coeffs.len() <= RAW_BLOB_SIZE + 1);
+
+        return Ok(coeffs_to_evals(&data_coeffs));
     }
     Err(RecoveryErr::ExtaustiveK)
 }
@@ -159,9 +166,9 @@ mod tests {
     #[test]
     fn test_data_poly() {
         test_data_poly_with_data(vec![Scalar::zero(); ENCODED_BLOB_SIZE]);
-        dbg!("zero test is Ok");
+        println!("zero test is Ok");
         test_data_poly_with_data(random_data_before_recovery(COSET_N));
-        dbg!("random test is Ok");
+        println!("random test is Ok");
     }
 
     fn check_evals_to_poly(data_before_recovery: Vec<Scalar>) {

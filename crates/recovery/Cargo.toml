@@ -13,7 +13,7 @@ rayon = { workspace = true, optional = true }
 
 [dev-dependencies]
 rand = "0.8"
-zg-encoder = { workspace = true, features = ["testonly_code"]}
+zg-encoder = { workspace = true, features = ["testonly_code"] }
 
 [features]
 default = []
