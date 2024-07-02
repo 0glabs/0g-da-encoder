@@ -1,12 +1,12 @@
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use ark_ff::{batch_inversion, Field, One, Zero};
 use ark_std::{cfg_iter, rand, UniformRand};
 use zg_encoder::constants::{
-    Scalar, BLOB_ROW_ENCODED, BLOB_ROW_N, ENCODED_BLOB_SIZE, RAW_BLOB_SIZE,
+    Scalar, BLOB_COL_N, BLOB_ROW_ENCODED, BLOB_ROW_N, RAW_BLOB_SIZE,
 };
 
 use crate::{
@@ -26,31 +26,57 @@ fn inverse_vec_checked(input: &mut [Scalar]) -> bool {
     true
 }
 
-fn check_input(
-    row_ids: &BTreeSet<usize>, data_before_recovery: &[Scalar],
-) -> Result<(), RecoveryErr> {
-    if data_before_recovery.len() != ENCODED_BLOB_SIZE {
-        return Err(RecoveryErr::InvalidLength);
+fn check_input(data: &BTreeMap<usize, Vec<Scalar>>) -> Result<(), RecoveryErr> {
+    if data.len() < BLOB_ROW_N {
+        return Err(RecoveryErr::TooFewRowIds);
     }
-    if !row_ids.is_empty() && row_ids.last().unwrap() >= &BLOB_ROW_ENCODED {
+
+    // unwrap safety: data.len() >= BLOB_ROW_N = (1 << BLOB_ROW_LOG) >= 1, thus,
+    // !data.is_empty() is always true
+    if data.last_key_value().unwrap().0 >= &BLOB_ROW_ENCODED {
         return Err(RecoveryErr::RowIdOverflow);
     }
-    if row_ids.len() > BLOB_ROW_ENCODED - BLOB_ROW_N {
-        return Err(RecoveryErr::TooManyRowIds);
+
+    for row_data in data.values() {
+        if row_data.len() != BLOB_COL_N {
+            return Err(RecoveryErr::InvalidLength);
+        }
     }
+
     Ok(())
 }
 
+fn convert_input(
+    data: &BTreeMap<usize, Vec<Scalar>>,
+) -> (BTreeSet<usize>, Vec<Scalar>) {
+    let erasured_row_ids: BTreeSet<usize> = (0..COSET_MORE * BLOB_ROW_N)
+        .filter(|x| data.get(x).is_none())
+        .collect();
+    let mut data_times_z = vec![Scalar::zero(); COSET_MORE * RAW_BLOB_SIZE];
+    for (row_idx, row_data) in data {
+        for (elem_idx, elem_data) in data_times_z
+            .iter_mut()
+            .take((row_idx + 1) * BLOB_COL_N)
+            .skip(row_idx * BLOB_COL_N)
+            .enumerate()
+        {
+            *elem_data = row_data[elem_idx]
+        }
+    }
+    (erasured_row_ids, data_times_z)
+}
+
 pub fn data_poly(
-    row_ids: &BTreeSet<usize>, data_before_recovery: &[Scalar],
+    data: &BTreeMap<usize, Vec<Scalar>>,
 ) -> Result<Vec<Scalar>, RecoveryErr> {
-    check_input(row_ids, data_before_recovery)?;
+    check_input(data)?;
+    let (erasured_row_ids, erasured_data) = convert_input(data);
     const TRY_TIMES: usize = 100;
 
-    let zcoeffs = zpoly(row_ids).to_vec();
+    let zcoeffs = zpoly(&erasured_row_ids).to_vec();
 
     let data_times_zcoeffs =
-        data_times_zpoly(row_ids, data_before_recovery, &zcoeffs).to_vec();
+        data_times_zpoly(&erasured_row_ids, &erasured_data, &zcoeffs).to_vec();
 
     assert!(zcoeffs.len() <= COSET_MORE * RAW_BLOB_SIZE);
     assert!(data_times_zcoeffs.len() <= COSET_MORE * RAW_BLOB_SIZE);
@@ -79,7 +105,7 @@ pub fn data_poly(
             .zip(cfg_iter!(z_kx_evals_inverse))
             .map(|(x, y)| x * y)
             .collect();
-        let data_kx_coeffs = evals_to_poly(data_kx_evals).to_vec();
+        let data_kx_coeffs = evals_to_poly(&data_kx_evals).to_vec();
         let data_coeffs = fx_to_fkx(&data_kx_coeffs, k_inverse);
         assert!(data_coeffs.len() <= RAW_BLOB_SIZE + 1);
 
@@ -94,98 +120,132 @@ mod tests {
         data_poly::data_poly,
         error::RecoveryErr,
         utils::{
-            coeffs_to_evals, coeffs_to_evals_larger, coeffs_to_evals_more,
-            evals_to_poly, random_scalars,
+            coeffs_to_evals_larger, evals_to_poly, random_row_ids,
+            random_scalars,
         },
         zpoly::COSET_MORE,
     };
     use amt::{change_matrix_direction, to_coset_blob};
     use ark_ff::Zero;
-    use std::collections::BTreeSet;
+    use ark_std::rand::{thread_rng, Rng};
+    use std::collections::BTreeMap;
     use zg_encoder::constants::{
-        Scalar, BLOB_COL_LOG, BLOB_ROW_ENCODED, BLOB_ROW_LOG, BLOB_ROW_N,
-        COSET_N, ENCODED_BLOB_SIZE, PE, RAW_BLOB_SIZE,
+        Scalar, BLOB_COL_LOG, BLOB_COL_N, BLOB_ROW_ENCODED, BLOB_ROW_LOG,
+        BLOB_ROW_N, COSET_N, ENCODED_BLOB_SIZE, PE, RAW_BLOB_SIZE,
     };
 
-    fn check_data_poly(
-        row_ids: BTreeSet<usize>, data_before_recovery: &[Scalar],
-    ) {
-        let evals = data_poly(&row_ids, data_before_recovery).unwrap();
-
-        assert_eq!(data_before_recovery, evals);
+    fn get_data_poly(
+        row_ids: &[usize], data_before_erasured: &[Scalar],
+    ) -> Result<Vec<Scalar>, RecoveryErr> {
+        let data: BTreeMap<usize, Vec<Scalar>> = row_ids
+            .iter()
+            .map(|row_idx| {
+                (
+                    *row_idx,
+                    data_before_erasured[std::cmp::min(
+                        row_idx,
+                        &(BLOB_ROW_ENCODED - 1),
+                    ) * BLOB_COL_N
+                        ..std::cmp::min(row_idx + 1, BLOB_ROW_ENCODED)
+                            * BLOB_COL_N]
+                        .to_vec(),
+                )
+            })
+            .collect();
+        data_poly(&data)
     }
 
-    fn random_data_before_recovery(coset_num: usize) -> Vec<Scalar> {
-        let mut data = random_scalars(RAW_BLOB_SIZE);
+    fn check_data_poly(row_ids: &[usize], data_before_erasured: &[Scalar]) {
+        let evals = get_data_poly(row_ids, data_before_erasured).unwrap();
+        assert_eq!(data_before_erasured, evals);
+    }
+
+    fn random_data_before_erasured<R: Rng>(
+        coset_num: usize, rng: &mut R,
+    ) -> Vec<Scalar> {
+        let mut data = random_scalars(RAW_BLOB_SIZE, rng);
         change_matrix_direction(&mut data, BLOB_COL_LOG, BLOB_ROW_LOG);
-        let mut data_before_recovery_chunks: Vec<_> = (0..coset_num)
+        let mut data_before_erasured_chunks: Vec<_> = (0..coset_num)
             .map(|coset_idx| to_coset_blob::<PE>(&data, coset_idx))
             .collect();
-        for chunk in data_before_recovery_chunks.iter_mut() {
+        for chunk in data_before_erasured_chunks.iter_mut() {
             change_matrix_direction(chunk, BLOB_ROW_LOG, BLOB_COL_LOG);
         }
-        let data_before_recovery = data_before_recovery_chunks
+        let data_before_erasured = data_before_erasured_chunks
             .into_iter()
             .flat_map(|x| x)
             .collect();
-        data_before_recovery
+        data_before_erasured
     }
 
-    fn test_data_poly_with_data(data_before_recovery: Vec<Scalar>) {
-        check_data_poly(BTreeSet::from([0]), &data_before_recovery);
-        check_data_poly(
-            BTreeSet::from([BLOB_ROW_N + 1, BLOB_ROW_N * 2]),
-            &data_before_recovery,
-        );
-        check_data_poly(
-            BTreeSet::from([BLOB_ROW_N, BLOB_ROW_N + 1]),
-            &data_before_recovery,
-        );
-        let mut all: BTreeSet<usize> = (0..BLOB_ROW_N).collect();
-        check_data_poly(all.clone(), &data_before_recovery);
-        all = (0..BLOB_ROW_N * 2).collect();
-        check_data_poly(all.clone(), &data_before_recovery);
-        all = (BLOB_ROW_N..BLOB_ROW_ENCODED).collect();
-        check_data_poly(all.clone(), &data_before_recovery);
-        all.remove(&(BLOB_ROW_N * 2 - 1));
-        check_data_poly(all, &data_before_recovery);
-        all = (0..BLOB_ROW_ENCODED).step_by(2).collect();
-        check_data_poly(all, &data_before_recovery);
-        all = (0..BLOB_ROW_N * 2 + 1).collect();
+    fn test_data_poly_with_data<R: Rng>(
+        data_before_erasured: &[Scalar], rng: &mut R,
+    ) {
+        let row_ids: Vec<usize> = (1..BLOB_ROW_ENCODED).collect();
+        check_data_poly(&row_ids, data_before_erasured);
+        let mut row_ids: Vec<usize> = (0..BLOB_ROW_N).collect();
+        row_ids.extend((BLOB_ROW_N + 1)..BLOB_ROW_ENCODED);
+        check_data_poly(&row_ids, data_before_erasured);
+        let row_ids: Vec<usize> =
+            ((BLOB_ROW_N + 1)..BLOB_ROW_ENCODED).collect();
+        check_data_poly(&row_ids, data_before_erasured);
+        let row_ids: Vec<usize> =
+            ((BLOB_ROW_ENCODED - BLOB_ROW_N)..BLOB_ROW_ENCODED).collect();
+        check_data_poly(&row_ids, data_before_erasured);
+        let row_ids: Vec<usize> = (0..BLOB_ROW_N).collect();
+        check_data_poly(&row_ids, data_before_erasured);
+        let row_ids: Vec<usize> =
+            (0..BLOB_ROW_ENCODED).skip(1).step_by(2).collect();
+        check_data_poly(&row_ids, data_before_erasured);
+
+        let row_ids: Vec<usize> =
+            (BLOB_ROW_ENCODED - BLOB_ROW_N + 2..BLOB_ROW_ENCODED + 1).collect();
         assert_eq!(
-            data_poly(&all, &data_before_recovery),
-            Err(RecoveryErr::TooManyRowIds)
+            get_data_poly(&row_ids, data_before_erasured),
+            Err(RecoveryErr::TooFewRowIds)
         );
-        all = (BLOB_ROW_N..BLOB_ROW_ENCODED + 1).collect();
+        let row_ids: Vec<usize> =
+            (BLOB_ROW_ENCODED - BLOB_ROW_N + 1..BLOB_ROW_ENCODED + 1).collect();
         assert_eq!(
-            data_poly(&all, &data_before_recovery),
+            get_data_poly(&row_ids, data_before_erasured),
             Err(RecoveryErr::RowIdOverflow)
         );
+
+        for _ in 0..3 {
+            for row_num in BLOB_ROW_N..BLOB_ROW_ENCODED + 1 {
+                let row_ids = random_row_ids(row_num, rng);
+                check_data_poly(&row_ids, data_before_erasured);
+            }
+        }
     }
 
     #[test]
     fn test_data_poly() {
-        test_data_poly_with_data(vec![Scalar::zero(); ENCODED_BLOB_SIZE]);
+        let mut rng = thread_rng();
+        test_data_poly_with_data(
+            &vec![Scalar::zero(); ENCODED_BLOB_SIZE],
+            &mut rng,
+        );
         println!("zero test is Ok");
-        test_data_poly_with_data(random_data_before_recovery(COSET_N));
+        test_data_poly_with_data(
+            &random_data_before_erasured(COSET_N, &mut rng),
+            &mut rng,
+        );
         println!("random test is Ok");
     }
 
-    fn check_evals_to_poly(data_before_recovery: Vec<Scalar>) {
-        let coeffs = evals_to_poly(data_before_recovery.clone()).to_vec();
+    fn check_evals_to_poly(data_before_recovery: &[Scalar]) {
+        let coeffs = evals_to_poly(data_before_recovery).to_vec();
         assert!(coeffs.len() <= RAW_BLOB_SIZE);
         let evals_larger = coeffs_to_evals_larger(&coeffs);
         assert_eq!(evals_larger, data_before_recovery);
         assert!(coeffs.len() <= COSET_MORE * RAW_BLOB_SIZE);
-        let evals = coeffs_to_evals(&coeffs);
-        assert_eq!(evals, evals_larger[..ENCODED_BLOB_SIZE]);
-        let evals_more = coeffs_to_evals_more(&coeffs);
-        assert_eq!(evals_more, evals_larger[ENCODED_BLOB_SIZE..]);
     }
 
     #[test]
     fn test_evals_to_poly() {
-        check_evals_to_poly(vec![Scalar::zero(); COSET_MORE * RAW_BLOB_SIZE]);
-        check_evals_to_poly(random_data_before_recovery(COSET_MORE));
+        let mut rng = thread_rng();
+        check_evals_to_poly(&vec![Scalar::zero(); COSET_MORE * RAW_BLOB_SIZE]);
+        check_evals_to_poly(&random_data_before_erasured(COSET_MORE, &mut rng));
     }
 }

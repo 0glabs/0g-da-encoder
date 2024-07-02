@@ -8,7 +8,10 @@ use ark_ff::{Field, Zero};
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
 use ark_std::{cfg_chunks_mut, log2};
 #[cfg(test)]
-use ark_std::{rand, UniformRand};
+use ark_std::{
+    rand::{seq::SliceRandom, Rng},
+    UniformRand,
+};
 use zg_encoder::constants::{
     Scalar, BLOB_COL_LOG, BLOB_ROW_LOG, COSET_N, PE, RAW_BLOB_SIZE,
 };
@@ -24,11 +27,17 @@ pub fn many_non_zeros(vec: &[Scalar]) -> bool {
 }
 
 #[cfg(test)]
-pub fn random_scalars(length: usize) -> Vec<Scalar> {
-    let mut rng = rand::thread_rng();
-    (0..length)
-        .map(|_| Scalar::rand(&mut rng))
-        .collect::<Vec<_>>()
+pub fn random_scalars<R: Rng>(length: usize, rng: &mut R) -> Vec<Scalar> {
+    (0..length).map(|_| Scalar::rand(rng)).collect::<Vec<_>>()
+}
+
+#[cfg(test)]
+pub fn random_row_ids<R: Rng>(row_num: usize, rng: &mut R) -> Vec<usize> {
+    use zg_encoder::constants::BLOB_ROW_ENCODED;
+
+    let mut row_ids: Vec<usize> = (0..BLOB_ROW_ENCODED).collect();
+    row_ids.shuffle(rng);
+    row_ids[..row_num].to_vec()
 }
 
 pub fn fx_to_fkx(coeffs_fx: &[Scalar], k: Scalar) -> Vec<Scalar> {
@@ -71,28 +80,19 @@ fn coeffs_to_evals_coset(coeffs: &[Scalar], coset_idx: usize) -> Vec<Scalar> {
     evals
 }
 
+pub fn coeffs_to_evals_larger(coeffs: &[Scalar]) -> Vec<Scalar> {
+    (0..COSET_MORE)
+        .flat_map(|coset_idx| coeffs_to_evals_coset(coeffs, coset_idx))
+        .collect()
+}
+
 pub fn coeffs_to_evals(coeffs: &[Scalar]) -> Vec<Scalar> {
     (0..COSET_N)
         .flat_map(|coset_idx| coeffs_to_evals_coset(coeffs, coset_idx))
         .collect()
 }
 
-#[cfg(test)]
-pub fn coeffs_to_evals_more(coeffs: &[Scalar]) -> Vec<Scalar> {
-    let coset_larger = COSET_N.next_power_of_two();
-    (COSET_N..coset_larger)
-        .flat_map(|coset_idx| coeffs_to_evals_coset(coeffs, coset_idx))
-        .collect()
-}
-
-pub fn coeffs_to_evals_larger(coeffs: &[Scalar]) -> Vec<Scalar> {
-    let coset_larger = COSET_N.next_power_of_two();
-    (0..coset_larger)
-        .flat_map(|coset_idx| coeffs_to_evals_coset(coeffs, coset_idx))
-        .collect()
-}
-
-pub fn evals_to_poly(evals: Vec<Scalar>) -> Poly {
+pub fn evals_to_poly(evals: &[Scalar]) -> Poly {
     assert_eq!(evals.len(), COSET_MORE * RAW_BLOB_SIZE);
     assert!(evals.len().is_power_of_two());
 

@@ -57,20 +57,15 @@ impl ZBlob {
     }
 }
 
-pub fn zpoly(row_ids: &BTreeSet<usize>) -> Poly {
-    if !row_ids.is_empty() {
-        assert!(row_ids.last().unwrap() < &BLOB_ROW_ENCODED);
-    }
-
-    let mut all_row_ids = row_ids.clone();
-    for more_id in BLOB_ROW_ENCODED..COSET_MORE * BLOB_ROW_N {
-        all_row_ids.insert(more_id);
+pub fn zpoly(erasured_row_ids: &BTreeSet<usize>) -> Poly {
+    if !erasured_row_ids.is_empty() {
+        assert!(*erasured_row_ids.last().unwrap() < COSET_MORE * BLOB_ROW_N);
     }
 
     let mut polys = vec![Poly::One(()); BLOB_ROW_ENCODED.next_power_of_two()];
     assert_eq!(COSET_MORE * BLOB_ROW_N, polys.len());
     let zblob = ZBlob::init();
-    for row_id in all_row_ids.iter() {
+    for row_id in erasured_row_ids.iter() {
         let mut sparse = BTreeMap::new();
         sparse.insert(BLOB_COL_N, Scalar::one());
         let coset_idx = row_id / BLOB_ROW_N;
@@ -85,26 +80,21 @@ pub fn zpoly(row_ids: &BTreeSet<usize>) -> Poly {
 #[cfg(test)]
 mod tests {
     use crate::{
-        utils::{coeffs_to_evals, coeffs_to_evals_more},
+        utils::coeffs_to_evals_larger,
         zpoly::{zpoly, COSET_MORE},
     };
     use ark_ff::Zero;
     use std::collections::BTreeSet;
     use zg_encoder::constants::{
-        Scalar, BLOB_COL_N, BLOB_ROW_ENCODED, BLOB_ROW_N, COSET_N,
-        RAW_BLOB_SIZE,
+        Scalar, BLOB_COL_N, BLOB_ROW_ENCODED, BLOB_ROW_N,
     };
 
-    fn check_zpoly(row_ids: BTreeSet<usize>) {
+    fn check_zpoly(row_ids: &mut BTreeSet<usize>) {
+        row_ids.extend(BLOB_ROW_ENCODED..COSET_MORE * BLOB_ROW_N);
         let coeffs = zpoly(&row_ids).to_vec();
-        assert_eq!(
-            coeffs.len(),
-            (COSET_MORE - COSET_N) * RAW_BLOB_SIZE
-                + row_ids.len() * BLOB_COL_N
-                + 1
-        );
+        assert_eq!(coeffs.len(), row_ids.len() * BLOB_COL_N + 1);
 
-        let evals = coeffs_to_evals(&coeffs);
+        let evals = coeffs_to_evals_larger(&coeffs);
         let zeros: Vec<_> = row_ids
             .iter()
             .flat_map(|idx| {
@@ -113,25 +103,21 @@ mod tests {
             .collect();
         let all_zeros = zeros.iter().all(|x| **x == Scalar::zero());
         assert!(all_zeros);
-
-        assert!(coeffs.len() <= COSET_MORE * RAW_BLOB_SIZE + 1);
-        let more_evals = coeffs_to_evals_more(&coeffs);
-        assert!(more_evals.iter().all(|x| *x == Scalar::zero()));
     }
+
     #[test]
     fn test_zpoly() {
-        check_zpoly(BTreeSet::from([0]));
-        check_zpoly(BTreeSet::from([BLOB_ROW_N + 1, BLOB_ROW_N * 2]));
-        check_zpoly(BTreeSet::from([BLOB_ROW_N, BLOB_ROW_N + 1]));
+        check_zpoly(&mut BTreeSet::from([0]));
+        check_zpoly(&mut BTreeSet::from([BLOB_ROW_N, BLOB_ROW_N + 1]));
         let mut all: BTreeSet<usize> = (0..BLOB_ROW_N).collect();
-        check_zpoly(all.clone());
+        check_zpoly(&mut all);
         all = (0..BLOB_ROW_N * 2).collect();
-        check_zpoly(all.clone());
+        check_zpoly(&mut all);
         all = (0..BLOB_ROW_ENCODED).collect();
-        check_zpoly(all.clone());
+        check_zpoly(&mut all);
         all.remove(&(BLOB_ROW_N * 2 - 1));
-        check_zpoly(all.clone());
-        all = (0..BLOB_ROW_ENCODED).skip(1).collect();
-        check_zpoly(all.clone());
+        check_zpoly(&mut all);
+        all = (0..BLOB_ROW_ENCODED).step_by(1).collect();
+        check_zpoly(&mut all);
     }
 }

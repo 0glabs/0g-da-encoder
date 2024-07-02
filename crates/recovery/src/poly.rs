@@ -306,9 +306,13 @@ mod tests {
 
     #[test]
     fn test_dense_sparse_consistency() {
+        let mut rng = thread_rng();
         let length = 1 << 4;
-        let vec =
-            [vec![Scalar::zero(); length], random_scalars(length)].concat();
+        let vec = [
+            vec![Scalar::zero(); length],
+            random_scalars(length, &mut rng),
+        ]
+        .concat();
         let dense = Poly::dense_from_vec(&vec);
         let sparse = Poly::sparse_from_vec(vec);
         assert_eq!(dense, sparse);
@@ -324,10 +328,13 @@ mod tests {
 
     #[test]
     fn test_multiply_consistency() {
-        let length = 1 << 4;
-        let mut vec =
-            [vec![Scalar::zero(); length], random_scalars(length)].concat();
         let mut rng = thread_rng();
+        let length = 1 << 4;
+        let mut vec = [
+            vec![Scalar::zero(); length],
+            random_scalars(length, &mut rng),
+        ]
+        .concat();
         vec.shuffle(&mut rng);
         let dense = Poly::dense_from_vec(&vec);
         let sparse = Poly::sparse_from_vec(vec);

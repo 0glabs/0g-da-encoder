@@ -3,5 +3,5 @@ pub enum RecoveryErr {
     ExtaustiveK,
     InvalidLength,
     RowIdOverflow,
-    TooManyRowIds,
+    TooFewRowIds,
 }
