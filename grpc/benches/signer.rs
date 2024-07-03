@@ -4,7 +4,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use grpc::{EncoderService, SignerService};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use zg_encoder::{
-    constants::{G1Curve, BLOB_COL_N, BLOB_ROW_N, RAW_UNIT},
+    constants::{G1Curve, MAX_RAW_DATA_SIZE},
     EncodedSlice,
 };
 
@@ -25,7 +25,7 @@ fn signer(
 fn criterion_benchmark(c: &mut Criterion) {
     let param_dir = "../crates/amt/pp";
     let encoder_service = EncoderService::new_for_test(param_dir);
-    let num_bytes = RAW_UNIT * BLOB_ROW_N * BLOB_COL_N;
+    let num_bytes = MAX_RAW_DATA_SIZE;
     // generate input
     let seed = 222u64;
     let mut rng = StdRng::seed_from_u64(seed);

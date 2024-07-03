@@ -2,7 +2,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use grpc::{EncodeBlobReply, EncoderService};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use zg_encoder::{
-    constants::MAX_BLOB_SIZE, scalar_to_h256, EncodedBlob, EncodedBlobAMT,
+    constants::MAX_RAW_DATA_SIZE, scalar_to_h256, EncodedBlob, EncodedBlobAMT,
     EncodedBlobMerkle, RawBlob, RawData,
 };
 
@@ -69,7 +69,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     // generate input
     let seed = 222u64;
     let mut rng = StdRng::seed_from_u64(seed);
-    let mut data = vec![0u8; MAX_BLOB_SIZE];
+    let mut data = vec![0u8; MAX_RAW_DATA_SIZE];
     rng.fill(&mut data[..]);
 
     let mut group = c.benchmark_group("sample_size");
