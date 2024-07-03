@@ -84,7 +84,7 @@ bc148cd9ce28f65a4bacbe174a232bee426afd32dfce73004ee38ca9afa46059  power-tau-5DWg
 
 **Choice 1: Download the pre-built files.** Please make sure you have `curl` installed, then run the command in the project root directory:
 ```sh
-./dev-support/download_params.sh
+./dev_support/download_params.sh
 ```
 
 **Choice 2: Construct the parameters yourself.** Run the following command in the project root directory:
