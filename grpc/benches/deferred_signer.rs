@@ -15,10 +15,7 @@ use rand::{rngs::OsRng, Rng};
 use tracing::Level;
 
 use zg_encoder::{
-    constants::{
-        G1Curve, BLOB_COL_N, BLOB_ROW_ENCODED, BLOB_ROW_N, RAW_BLOB_SIZE,
-        RAW_UNIT,
-    },
+    constants::{G1Curve, BLOB_ROW_ENCODED, MAX_RAW_DATA_SIZE, RAW_BLOB_SIZE},
     EncodedBlob, EncodedSlice, RawBlob, RawData, ZgEncoderParams,
     ZgSignerParams,
 };
@@ -115,7 +112,7 @@ fn bench_defer(params: &ZgEncoderParams, ver_params: &ZgSignerParams) {
 fn make_slices(
     params: &ZgEncoderParams,
 ) -> (G1Curve, [u8; 32], Vec<EncodedSlice>) {
-    let mut data = vec![0u8; RAW_UNIT * BLOB_ROW_N * BLOB_COL_N];
+    let mut data = vec![0u8; MAX_RAW_DATA_SIZE];
     OsRng.fill(&mut data[..]);
     let raw_data: RawData = data[..].try_into().unwrap();
     let raw_blob: RawBlob = raw_data.into();

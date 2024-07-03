@@ -22,7 +22,7 @@ amt = { workspace = true }
 zg-encoder = {workspace = true}
 
 anyhow = "1"
-tracing = "0.1.40"
+tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [dev-dependencies]

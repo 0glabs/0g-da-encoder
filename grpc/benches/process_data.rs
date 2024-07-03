@@ -10,7 +10,7 @@ use amt::ec_algebra::UniformRand;
 use ark_bn254::Bn254;
 use rand::Rng;
 use zg_encoder::{
-    constants::{MAX_BLOB_SIZE, RAW_BLOB_SIZE},
+    constants::{MAX_RAW_DATA_SIZE, RAW_BLOB_SIZE},
     ZgEncoderParams,
 };
 
@@ -63,7 +63,7 @@ fn bench_amt(params: ZgEncoderParams) {
 
 fn bench_all(params: ZgEncoderParams) {
     let encoder = EncoderService { params };
-    let mut data = vec![0u8; MAX_BLOB_SIZE];
+    let mut data = vec![0u8; MAX_RAW_DATA_SIZE];
     thread_rng().fill(&mut data[..]);
 
     let start = Instant::now();

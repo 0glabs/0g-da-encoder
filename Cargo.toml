@@ -3,7 +3,8 @@ resolver = "2"
 members = [
 	"crates/amt",
 	"crates/encoder",
-	"crates/ppot2ark", "crates/recovery",
+	"crates/ppot2ark", 
+	"crates/recovery",
 	"grpc",
 	"server",
 ]

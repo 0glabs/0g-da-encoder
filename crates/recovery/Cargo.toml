@@ -1,5 +1,5 @@
 [package]
-name = "recovery"
+name = "zg-da-recovery"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,12 +10,19 @@ ark-ff = "0.4"
 ark-poly = "0.4"
 ark-std = "0.4"
 rayon = { workspace = true, optional = true }
-tracing = "0.1.40"
+tracing = { workspace = true }
 
 [dev-dependencies]
 rand = "0.8"
 zg-encoder = { workspace = true, features = ["testonly_code"] }
+tracing-subscriber = { workspace = true }
+ark-bn254 = "0.4"
+hex = "*"
 
 [features]
 default = []
 parallel = ["ark-poly/parallel", "ark-std/parallel", "amt/parallel", "zg-encoder/parallel", "rayon"]
+
+[[bench]]
+name = "recover"
+harness = false

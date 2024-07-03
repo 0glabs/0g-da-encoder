@@ -4,38 +4,37 @@ use rayon::prelude::*;
 use std::cmp::max;
 
 use amt::{bitreverse, change_matrix_direction, AMTParams};
-use ark_ff::{Field, Zero};
+use ark_ff::{BigInt, Field, MontConfig, Zero};
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
-use ark_std::{cfg_chunks_mut, log2};
+use ark_std::{cfg_chunks, cfg_chunks_mut, log2};
 #[cfg(test)]
 use ark_std::{
     rand::{seq::SliceRandom, Rng},
     UniformRand,
 };
-use zg_encoder::{
-    constants::{
-        Scalar, BLOB_COL_LOG, BLOB_ROW_LOG, MAX_BLOB_SIZE, PE, RAW_BLOB_SIZE,
-    },
-    raw_unit_to_scalar,
+use zg_encoder::constants::{
+    Scalar, BLOB_COL_LOG, BLOB_COL_N, BLOB_ROW_LOG, BLOB_UNIT, PE,
+    RAW_BLOB_SIZE,
 };
 
 use crate::{poly::Poly, zpoly::COSET_MORE};
 
+#[cfg(target_endian = "big")]
+compile_error!("This code cannot be compiled on big-endian systems.");
+
 pub fn raw_slice_to_line(slice: &[u8]) -> Result<Vec<Scalar>, String> {
-    if slice.len() != MAX_BLOB_SIZE {
+    if slice.len() != BLOB_UNIT * BLOB_COL_N {
         return Err("Incorrect raw slice length".to_string());
     }
-    slice
-        .chunks_exact(32)
+    Ok(cfg_chunks!(slice, 32)
         .map(|x| {
-            assert_eq!(x.len(), 32);
-            if x[31] != 0 {
-                return Err("A cell has more than 248 bits data".to_string());
-            }
-
-            Ok(raw_unit_to_scalar(x))
+            let mut raw = [0u8; 32];
+            raw.copy_from_slice(x);
+            let big_int: BigInt<4> =
+                BigInt(unsafe { std::mem::transmute(raw) });
+            MontConfig::from_bigint(big_int).unwrap()
         })
-        .collect()
+        .collect())
 }
 
 const SPARSE_THRES: usize = 100;
